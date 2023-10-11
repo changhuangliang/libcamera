@@ -65,6 +65,7 @@ ipa_mojom_files = [
     'raspberrypi.mojom',
     'rkisp1.mojom',
     'vimc.mojom',
+    'starfive.mojom',
 ]
 
 ipa_mojoms = []
