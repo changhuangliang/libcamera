@@ -27,7 +27,7 @@ option('gstreamer',
 
 option('ipas',
         type : 'array',
-        choices : ['ipu3', 'raspberrypi', 'rkisp1', 'vimc'],
+        choices : ['ipu3', 'raspberrypi', 'rkisp1', 'vimc', 'starfive'],
         description : 'Select which IPA modules to build')
 
 option('lc-compliance',
@@ -47,7 +47,8 @@ option('pipelines',
             'rkisp1',
             'simple',
             'uvcvideo',
-            'vimc'
+            'vimc',
+            'starfive'
         ],
         description : 'Select which pipeline handlers to build. If this is set to "auto", all the pipelines applicable to the target architecture will be built. If this is set to "all", all the pipelines will be built. If both are selected then "all" will take precedence.')
 
