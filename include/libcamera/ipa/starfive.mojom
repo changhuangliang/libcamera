@@ -1,0 +1,34 @@
+/* SPDX-License-Identifier: LGPL-2.1-or-later */
+
+/*
+ * \todo Document the interface and remove the related EXCLUDE_PATTERNS entry.
+ */
+
+module ipa.starfive;
+
+import "include/libcamera/ipa/core.mojom";
+
+interface IPAStarfiveInterface {
+	init(libcamera.IPASettings settings, 
+		libcamera.IPACameraSensorInfo sensorInfo,
+		libcamera.ControlInfoMap sensorControls)
+		=> (int32 ret);
+	start(libcamera.ControlList controls) => (int32 ret);
+	stop();
+
+	configure(libcamera.ControlInfoMap ispControls,
+		libcamera.ControlInfoMap sensorControls) => (int32 ret);
+
+	isSensorISPEnabled() => (bool ret);
+
+	mapBuffers(array<libcamera.IPABuffer> buffers);
+	unmapBuffers(array<uint32> ids);
+
+	[async] queueRequest(libcamera.ControlList controls);
+	[async] statBufferReady(uint32 bufferId, libcamera.ControlList sensorControls);
+};
+
+interface IPAStarfiveEventInterface {
+	setDelayedControls(libcamera.ControlList controls);
+	setIspControls(libcamera.ControlList controls);
+};

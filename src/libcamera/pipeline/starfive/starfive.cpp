@@ -27,7 +27,6 @@
 #include <libcamera/property_ids.h>
 #include <libcamera/request.h>
 
-#include <linux/jh7110-isp.h>
 #include <linux/media-bus-format.h>
 #include <linux/videodev2.h>
 
