@@ -4,7 +4,7 @@
     "sensor_isp_enable": 0,
     "algorithms":
     {
-        "vision5.ae":
+        "star5.ae":
         {
             "enable": 1,
             "setting": 
@@ -115,7 +115,7 @@
                 "expect_adc": 1.0
             }
         },
-        "vision5.wb":
+        "star5.wb":
         {
             "auto":
             {
@@ -144,7 +144,7 @@
                 "enable": 1
             }
         },
-        "vision5.ccm":
+        "star5.ccm":
         {
             "auto":
             {
@@ -174,7 +174,7 @@
                 "offset": [0, 0, 0]
             }
         },
-        "vision5.dnyuv":
+        "star5.dnyuv":
         {
             "auto":
             {
@@ -440,7 +440,7 @@
                 ]
             }
         },
-        "vision5.lccf":
+        "star5.lccf":
         {
             "auto":
             {
@@ -567,7 +567,7 @@
                 "radius": 11
             }
         },
-        "vision5.sat":
+        "star5.sat":
         {
             "auto":
             {
@@ -638,7 +638,7 @@
                 }
             }
         },
-        "vision5.shrp":
+        "star5.shrp":
         {
             "auto":
             {
@@ -695,7 +695,7 @@
                 "neg_dir_factor": 1.0
             }
         },
-        "vision5.ycrv":
+        "star5.ycrv":
         {
             "auto":
             {
@@ -734,17 +734,17 @@
                 "enable": 1
             }
         },
-        "vision5.car":
+        "star5.car":
         {
             "enable": 1
         },
-        "vision5.cfa":
+        "star5.cfa":
         {
             "enable": 1,
             "hv_width": 2,
             "cross_cov": 3
         },
-        "vision5.ctc":
+        "star5.ctc":
         {
             "enable": 1,
             "smooth_area_filter_mode": 0, 
@@ -752,18 +752,18 @@
             "max_gt": 320,
             "min_gt": 64
         },
-        "vision5.dbc":
+        "star5.dbc":
         {
             "enable": 1,
             "bad_gt": 512,
             "bad_xt": 512
         },
-        "vision5.gmargb":
+        "star5.gmargb":
         {
             "enable": 1,
             "gamma_curve": [0, 212, 290, 349, 398, 440, 478, 513, 545, 656, 747, 827, 898, 964, 1023]
         },
-        "vision5.obc":
+        "star5.obc":
         {
             "enable": 1,
             "width": 11,
@@ -823,7 +823,7 @@
                 }
             ]
         },
-        "vision5.oecf":
+        "star5.oecf":
         {
             "enable": 1,
             "r_oecf_crv":
@@ -903,12 +903,12 @@
                 1022, 1022
             ]
         },
-        "vision5.r2y":
+        "star5.r2y":
         {
             "enable": 1,
             "matrix": [0.2969, 0.5898, 0.1133, -0.1680, -0.3281, 0.5000, 0.5000, -0.4219, -0.0781]
         },
-        "vision5.sc":
+        "star5.sc":
         {
             "enable": 1,
             "af_config":
