@@ -33,6 +33,7 @@
 #include "libcamera/internal/yaml_parser.h"
 
 #include "helper/sensor_helper.h"
+#include "linux/jh7110-isp.h"
 
 namespace libcamera {
 
@@ -56,7 +57,8 @@ public:
 	int start(const ControlList &controls) override;
 	void stop() override {}
 
-	int configure(const ControlInfoMap &ispControls, const ControlInfoMap &sensorControls) override;
+	int configure(const ControlInfoMap &ispControls, const ControlInfoMap &sensorControls, 
+		const IPACameraSensorInfo &sensorInfo, const std::vector<ssParams> &outSSParams) override;
 
 	void mapBuffers(const std::vector<IPABuffer> &buffers) override;
 	void unmapBuffers(const std::vector<unsigned int> &ids) override;
@@ -69,25 +71,92 @@ public:
 private:
 	bool sensorISPEnable_;
 	bool hardwareInited_;
+	Size sensorSize_;
+
+	ControlInfoMap ispCtrlInfoMap_;
 
 	std::map<uint32_t, MappedFrameBuffer> scBufferMaps_;
+
+	struct ssParams ssParams_[2];
+
+private:
+	void setSSParams(const std::vector<ssParams> &params, const Size &sensorOutput);
+	void setSSParamsControl(ControlList &ctrlList);
 };
 
 int IPASTARFIVE::init([[maybe_unused]] const IPASettings &settings, 
 	[[maybe_unused]] const IPACameraSensorInfo &sensorInfo, 
 	[[maybe_unused]] const ControlInfoMap &sensorControls)
 {
+
+	sensorSize_ = sensorInfo.outputSize;
+
+	ssParams_[0].outWidth = sensorInfo.outputSize.width;
+	ssParams_[0].outHeight = sensorInfo.outputSize.height;
+	ssParams_[1] = ssParams_[0];
+
 	return 0;
+}
+
+void IPASTARFIVE::setSSParamsControl(ControlList &ctrlList)
+{
+	uint8_t buffer[sizeof(struct jh7110_isp_outss_setting) * 2];
+
+	for(uint32_t i = 0; i < 2; i++) {
+		struct jh7110_isp_outss_setting *setting = (struct jh7110_isp_outss_setting *)buffer + i;
+
+		setting->which = (uint8_t)i;
+		setting->stride = (ssParams_[i].outWidth + 7) & 0xfffffff8; //8-byte(64bit) granularity
+		if(ssParams_[i].outWidth < sensorSize_.width) {
+			setting->hsm = 0;	// scale down
+			setting->hsf = ((ssParams_[i].outWidth << 12) + (sensorSize_.width - 1)) / sensorSize_.width;
+		}else {
+			setting->hsm = 2;	// no scale
+			setting->hsf = 0;
+		}
+		if(ssParams_[i].outHeight < sensorSize_.height) {
+			setting->vsm = 0;	// scale down
+			setting->vsf = ((ssParams_[i].outHeight << 12) + (sensorSize_.height - 1)) / sensorSize_.height;
+		}else {
+			setting->vsm = 2;	// no scale
+			setting->vsf = 0;
+		}
+
+		ControlValue ctrlV(Span<const uint8_t>(reinterpret_cast<uint8_t *>(setting),
+				       sizeof(struct jh7110_isp_outss_setting)));
+		ctrlList.set(V4L2_CID_USER_JH7110_ISP_OUTSS0_SETTING + i, ctrlV);
+	}
 }
 
 int IPASTARFIVE::start([[maybe_unused]] const ControlList &controls)
 {
+	ControlList moduleControls(ispCtrlInfoMap_);
+
+	setSSParamsControl(moduleControls);
+
+	setIspControls.emit(moduleControls);
+
 	return 0;
 }
 
-int IPASTARFIVE::configure([[maybe_unused]] const ControlInfoMap &ispControls, 
-	[[maybe_unused]] const ControlInfoMap &sensorControls)
+void IPASTARFIVE::setSSParams(const std::vector<ssParams> &params, const Size &sensorOutputSize)
 {
+	int index = 0;
+
+	for(const ssParams &p : params) {
+		if(p.outWidth <= sensorOutputSize.width && p.outHeight <= sensorOutputSize.height)
+			ssParams_[index++] = p;
+	}
+}
+
+int IPASTARFIVE::configure([[maybe_unused]] const ControlInfoMap &ispControls, 
+	[[maybe_unused]] const ControlInfoMap &sensorControls, const IPACameraSensorInfo &sensorInfo, 
+	const std::vector<ssParams> &outSSParams)
+{
+	ispCtrlInfoMap_ = ispControls;
+	sensorSize_ = sensorInfo.outputSize;
+	setSSParams(outSSParams, sensorInfo.outputSize);
+
 	return 0;
 }
 
