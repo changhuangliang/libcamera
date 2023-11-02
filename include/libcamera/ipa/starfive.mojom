@@ -8,6 +8,11 @@ module ipa.starfive;
 
 import "include/libcamera/ipa/core.mojom";
 
+struct ssParams {
+	uint16 outWidth;
+	uint16 outHeight;
+};
+
 interface IPAStarfiveInterface {
 	init(libcamera.IPASettings settings, 
 		libcamera.IPACameraSensorInfo sensorInfo,
@@ -17,7 +22,9 @@ interface IPAStarfiveInterface {
 	stop();
 
 	configure(libcamera.ControlInfoMap ispControls,
-		libcamera.ControlInfoMap sensorControls) => (int32 ret);
+		libcamera.ControlInfoMap sensorControls,
+		libcamera.IPACameraSensorInfo sensorInfo,
+		array<ssParams> outSSParams) => (int32 ret);
 
 	isSensorISPEnabled() => (bool ret);
 

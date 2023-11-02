@@ -95,6 +95,8 @@ public:
 
 	MediaDevice *media_;
 	std::unique_ptr<V4L2VideoDevice> video_;
+	std::unique_ptr<V4L2VideoDevice> videoSS0_;
+	std::unique_ptr<V4L2VideoDevice> videoSS1_;
 	std::unique_ptr<V4L2VideoDevice> raw_;
 	std::unique_ptr<V4L2VideoDevice> scDev_;
 	std::unique_ptr<V4L2Subdevice> dvpDev_;
@@ -206,6 +208,16 @@ int StarfiveCameraData::init()
 		if (ret)
 			return ret;
 		
+		videoSS0_ = V4L2VideoDevice::fromEntityName(media_, "stf_vin0_isp0_ss0_video2");
+		ret = videoSS0_->open();
+		if (ret)
+			return ret;
+
+		videoSS1_ = V4L2VideoDevice::fromEntityName(media_, "stf_vin0_isp0_ss1_video3");
+		ret = videoSS1_->open();
+		if (ret)
+			return ret;
+
 		scDev_ = V4L2VideoDevice::fromEntityName(media_, "stf_vin0_isp0_scd_y_video7");
 		ret = scDev_->open();
 		if (ret)
@@ -355,10 +367,10 @@ bool StarfiveCameraData::findMatchVideoFormat(const PixelFormat &pixelFormat, co
 	if (!mbufCodeLink_.size())
 		return false;
 
-	const std::vector<uint32_t> &mbusCode = mbufCodeLink_.back();
+	const std::vector<uint32_t> &mbusCodes = mbufCodeLink_.back();
 	V4L2VideoDevice::Formats fmts;
 
-	for (auto &code : mbusCode) {
+	for (auto &code : mbusCodes) {
 		fmts = video_->formats(code);
 		for (const auto &cur : fmts) {
 			if (!pixelFormat.isValid() || cur.first.toPixelFormat() == pixelFormat) {
@@ -449,6 +461,8 @@ CameraConfiguration::Status StarfiveCameraConfiguration::validate()
 	if (transform != requestedTransform)
 		status = Adjusted;
 
+	std::vector<unsigned int> mbusCodes = utils::map_keys(mbusCodesToPixelFormat);
+
 	/* Cap the number of entries to the available streams. */
 	uint32_t kMaxStreams = !data_->disableISP ? 2 : 1;
 	if (config_.size() > kMaxStreams) {
@@ -482,6 +496,11 @@ CameraConfiguration::Status StarfiveCameraConfiguration::validate()
 				if (ret)
 					return Invalid;
 
+				V4L2SubdeviceFormat sensorFormat = data_->sensor_->getFormat(mbusCodes, cfg.size);
+				ret = data_->sensor_->tryFormat(&sensorFormat);
+				if (ret)
+					return Invalid;
+
 				cfg.stride = ((cfg.size.width * 12 / 8 + 8 * 16 - 1) / (8 * 16)) * 128;
 				cfg.frameSize = info.frameSize(cfg.size, 64);
 
@@ -497,6 +516,11 @@ CameraConfiguration::Status StarfiveCameraConfiguration::validate()
 				if (ret)
 					return Invalid;
 
+				V4L2SubdeviceFormat sensorFormat = data_->sensor_->getFormat(mbusCodes, cfg.size);
+				ret = data_->sensor_->tryFormat(&sensorFormat);
+				if (ret)
+					return Invalid;
+
 				cfg.pixelFormat = formats::NV12;
 				cfg.stride = format.planes[0].bpl;
 				cfg.frameSize = format.planes[0].size;
@@ -508,8 +532,10 @@ CameraConfiguration::Status StarfiveCameraConfiguration::validate()
 
 				V4L2PixelFormat fitFormat;
 
-				if (data_->findMatchVideoFormat(cfg.pixelFormat, cfg.size, fitFormat))
+				if (data_->findMatchVideoFormat(cfg.pixelFormat, cfg.size, fitFormat)) {
+
 					cfg.setStream(&data_->outStream_);
+				}
 			}
 		}
 	}
@@ -713,9 +739,10 @@ int PipelineHandlerStarfive::configure(Camera *camera, CameraConfiguration *c)
 	StarfiveCameraConfiguration *config =
 		static_cast<StarfiveCameraConfiguration *>(c);
 	StarfiveCameraData *data = cameraData(camera);
+	bool sensorFmtSet = false;
 	int ret = 0;
 
-	// Set the sensor transform.
+	// Set the sensor's format
 	std::vector<unsigned int> mbusCodes = utils::map_keys(mbusCodesToPixelFormat);
 	Size sensorResolution = data->sensor_->resolution();
 	V4L2SubdeviceFormat sensorFormat = data->sensor_->getFormat(mbusCodes, sensorResolution);
@@ -723,12 +750,14 @@ int PipelineHandlerStarfive::configure(Camera *camera, CameraConfiguration *c)
 	if (ret)
 		return ret;
 
-	// Configure the isp pad 6.
+	// Set the sensor transform.
 	auto mbusCTMap = mbusCodesTransform.find(sensorFormat.mbus_code);
 	if (mbusCTMap == mbusCodesTransform.end()) {
 		LOG(STARFIVE, Error) << "Can not find the mbus_code for the pad 6 of the ISP sub-device.";
 		return -EINVAL;
 	}
+
+	// Configure the isp pad 6.
 	sensorFormat.mbus_code = mbusCTMap->second;
 	ret = data->ispSubDev_->setFormat(6, &sensorFormat);
 	if (ret)
@@ -741,6 +770,12 @@ int PipelineHandlerStarfive::configure(Camera *camera, CameraConfiguration *c)
 		Stream *stream = cfg.stream();
 
 		if (stream == &data->rawStream_) {
+			sensorFormat = data->sensor_->getFormat(mbusCodes, cfg.size);
+			ret = data->sensor_->setFormat(&sensorFormat, config->combinedTransform_);
+			if (ret)
+				return ret;
+			sensorFmtSet = true;
+
 			V4L2DeviceFormat format = {};
 			format.fourcc = data->raw_->toV4L2PixelFormat(cfg.pixelFormat);
 			format.size = cfg.size;
@@ -757,6 +792,14 @@ int PipelineHandlerStarfive::configure(Camera *camera, CameraConfiguration *c)
 
 			data->rawStreamEnable_ = true;
 		} else if (stream == &data->outStream_) {
+			if(!sensorFmtSet ) {
+				sensorFormat = data->sensor_->getFormat(mbusCodes, cfg.size);
+				ret = data->sensor_->setFormat(&sensorFormat, config->combinedTransform_);
+				if (ret)
+					return ret;
+				sensorFmtSet = true;
+			}
+
 			V4L2DeviceFormat format = {};
 			format.fourcc = data->video_->toV4L2PixelFormat(cfg.pixelFormat);
 			format.size = cfg.size;
@@ -771,6 +814,18 @@ int PipelineHandlerStarfive::configure(Camera *camera, CameraConfiguration *c)
 			 	return -EINVAL;
 			}
 
+			format.fourcc = data->video_->toV4L2PixelFormat(cfg.pixelFormat);
+			format.size = cfg.size;
+			ret = data->videoSS0_->setFormat(&format);
+			if (ret)
+				return ret;
+
+			format.fourcc = data->video_->toV4L2PixelFormat(cfg.pixelFormat);
+			format.size = cfg.size;
+			ret = data->videoSS1_->setFormat(&format);
+			if (ret)
+				return ret;
+
 			ret = setupFormats(data, format);
 			if (ret)
 				return ret;
@@ -780,7 +835,7 @@ int PipelineHandlerStarfive::configure(Camera *camera, CameraConfiguration *c)
 				V4L2DeviceFormat scFormat = {};
 
 				scFormat.fourcc = data->raw_->toV4L2PixelFormat(pixelFormat);
-				scFormat.size = sensorResolution;
+				scFormat.size = cfg.size;
 				ret = data->scDev_->setFormat(&scFormat);
 				if (ret)
 					return -EINVAL;
@@ -789,7 +844,17 @@ int PipelineHandlerStarfive::configure(Camera *camera, CameraConfiguration *c)
 		}
 	}
 
-	ret = data->ipa_->configure(data->ispSubDev_->controls(), data->sensor_->controls());
+	IPACameraSensorInfo sensorInfo{};
+	ret = data->sensor_->sensorInfo(&sensorInfo);
+	if (ret)
+		return ret;
+
+	std::vector<ipa::starfive::ssParams> outSSParams = {
+		{(uint16_t)sensorInfo.outputSize.width, (uint16_t)sensorInfo.outputSize.height},
+		{(uint16_t)sensorInfo.outputSize.width, (uint16_t)sensorInfo.outputSize.height}
+	};
+	ret = data->ipa_->configure(data->ispSubDev_->controls(), data->sensor_->controls(),
+		sensorInfo, outSSParams);
 	if (ret)
 		return ret;
 
@@ -1006,6 +1071,19 @@ int PipelineHandlerStarfive::linkPipeline(std::unique_ptr<StarfiveCameraData> &d
 			if (ret)
 				return ret;
 		}
+	}
+
+	MediaLink *ssLink = sfMediaDev->link("stf_isp0", 2, "stf_vin0_isp0_ss0", 0);
+	if (ssLink) {
+		ret = ssLink->setEnabled(true);
+		if (ret)
+			return ret;
+	}
+	ssLink = sfMediaDev->link("stf_isp0", 3, "stf_vin0_isp0_ss1", 0);
+	if (ssLink) {
+		ret = ssLink->setEnabled(true);
+		if (ret)
+			return ret;
 	}
 	
 	return 0;
