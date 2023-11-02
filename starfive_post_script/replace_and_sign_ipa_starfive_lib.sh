@@ -18,7 +18,7 @@
 ###############################################################################
 curr_dir=$(dirname $0)
 
-src_ipa=$curr_dir/ipa_starfive.so.0.0.0
+src_ipa=$curr_dir/ipa_starfive.so.0.0.1
 
 ipa_so=ipa_starfive.so
 if [ $# -gt 0 ]; then
