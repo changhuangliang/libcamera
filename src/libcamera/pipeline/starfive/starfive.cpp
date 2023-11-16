@@ -587,6 +587,7 @@ PipelineHandlerStarfive::generateConfiguration(Camera *camera, const StreamRoles
 	StarfiveCameraData *data = cameraData(camera);
 	std::unique_ptr<StarfiveCameraConfiguration> config =
 		std::make_unique<StarfiveCameraConfiguration>(data);
+	std::optional<ColorSpace> colorSpace;
 
 	if (roles.empty())
 		return config;
@@ -606,6 +607,7 @@ PipelineHandlerStarfive::generateConfiguration(Camera *camera, const StreamRoles
 				pixelFormat = formats::NV12;
 				bufferCount = STREAM_BUFFER_COUNT;
 				streamFormats[pixelFormat] = data->sensorSizes();
+				colorSpace = ColorSpace::Sycc;
 				break;
 
 			case StreamRole::Raw: {
@@ -619,6 +621,7 @@ PipelineHandlerStarfive::generateConfiguration(Camera *camera, const StreamRoles
 				pixelFormat = mbusCodesToPixelFormat.at(sensorFormat.mbus_code);
 				sensorResolution = sensorFormat.size;
 				bufferCount = STREAM_BUFFER_COUNT;
+				colorSpace = ColorSpace::Raw;
 
 				streamFormats[pixelFormat] = data->sensorSizes();
 
@@ -633,6 +636,7 @@ PipelineHandlerStarfive::generateConfiguration(Camera *camera, const StreamRoles
 			cfg.size = sensorResolution;
 			cfg.pixelFormat = pixelFormat;
 			cfg.bufferCount = bufferCount;
+			cfg.colorSpace = colorSpace;
 			config->addConfiguration(cfg);
 		}
 	} else {
