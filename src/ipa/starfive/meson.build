@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: CC0-1.0
 
-subdir('helper')
+subdir('openAlgo')
 
 ipa_name = 'ipa_starfive'
 
 starfive_ipa_sources = files([
     'starfive.cpp',
+    'sensor_helper.cpp',
+    'sensor_helper_imx219.cpp',
 ])
 
 mod = shared_module(ipa_name,
@@ -13,7 +15,7 @@ mod = shared_module(ipa_name,
                     name_prefix : '',
                     include_directories : [ipa_includes, libipa_includes],
                     dependencies : libcamera_private,
-                    link_with : [libipa, sensor_helper_lib],
+                    link_with : [libipa, open_algorithms_lib],
                     install : true,
                     install_dir : ipa_install_dir)
 
@@ -27,4 +29,4 @@ if ipa_sign_module
 endif
 
 subdir('data')
-
+#subdir('algorithms')
