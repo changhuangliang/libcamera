@@ -2,4 +2,5 @@
 
 libcamera_sources += files([
     'starfive.cpp',
+    'starfive_simple.cpp',
 ])

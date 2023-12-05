@@ -44,26 +44,13 @@
 #include "libcamera/internal/yaml_parser.h"
 #include "libcamera/internal/mapped_framebuffer.h"
 
+#include "starfive.h"
+
 namespace libcamera {
 
 LOG_DEFINE_CATEGORY(STARFIVE)
 
-#define STREAM_BUFFER_COUNT						4
-#define STARFIVE_ISP_MAX_WIDTH					1920
-#define STARFIVE_ISP_MAX_HEIGHT					1080
-
 class PipelineHandlerStarfive;
-
-const std::map<uint32_t, PixelFormat> mbusCodesToPixelFormat = {
-	{ MEDIA_BUS_FMT_SBGGR10_1X10, formats::SBGGR12 },
-	{ MEDIA_BUS_FMT_SGBRG10_1X10, formats::SGBRG12 },
-	{ MEDIA_BUS_FMT_SGRBG10_1X10, formats::SGRBG12 },
-	{ MEDIA_BUS_FMT_SRGGB10_1X10, formats::SRGGB12 },
-	{ MEDIA_BUS_FMT_SBGGR12_1X12, formats::SBGGR12 },
-	{ MEDIA_BUS_FMT_SGBRG12_1X12, formats::SGBRG12 },
-	{ MEDIA_BUS_FMT_SGRBG12_1X12, formats::SGRBG12 },
-	{ MEDIA_BUS_FMT_SRGGB12_1X12, formats::SRGGB12 },
-};
 
 const std::map<uint32_t, uint32_t> mbusCodesTransform = {
 	{ MEDIA_BUS_FMT_SBGGR10_1X10, MEDIA_BUS_FMT_SBGGR12_1X12 },
@@ -76,42 +63,22 @@ const std::map<uint32_t, uint32_t> mbusCodesTransform = {
 	{ MEDIA_BUS_FMT_SRGGB12_1X12, MEDIA_BUS_FMT_SRGGB12_1X12 },
 };
 
-class StarfiveCameraData : public Camera::Private
+class StarfiveCameraData : public StarfiveCameraDataBase
 {
 public:
 	StarfiveCameraData(PipelineHandler *pipe, MediaDevice *media)
-		: Camera::Private(pipe), disableISP(false), media_(media)
+		: StarfiveCameraDataBase(pipe, media)
 	{
 	}
 
-	int init();
-	int loadIPA();
+	int init() override;
 
-	std::vector<SizeRange> sensorSizes() const;
-
-	void bufferReady(FrameBuffer *buffer);
-	void scBufferReady(FrameBuffer *buffer);
-	void frameStarted(uint32_t sequence);
-
-	bool disableISP;
-
-	std::unique_ptr<ipa::starfive::IPAProxyStarfive> ipa_;
-
-	MediaDevice *media_;
-	std::unique_ptr<V4L2VideoDevice> video_;
 	std::unique_ptr<V4L2VideoDevice> videoSS0_;
 	std::unique_ptr<V4L2VideoDevice> videoSS1_;
-	std::unique_ptr<V4L2VideoDevice> raw_;
-	std::unique_ptr<V4L2VideoDevice> scDev_;
 	std::unique_ptr<V4L2Subdevice> dvpDev_;
 	std::unique_ptr<V4L2Subdevice> csiPhySubDev_;
-	std::unique_ptr<V4L2Subdevice> csiSubDev_;
-	std::unique_ptr<V4L2Subdevice> ispSubDev_;
 	std::unique_ptr<V4L2Subdevice> vinIspSubDev_;
 	std::unique_ptr<V4L2Subdevice> wrSubDev_;
-	std::unique_ptr <CameraSensor> sensor_;
-	Stream outStream_;
-	Stream rawStream_;
 
 	enum class SensorDataInterface
 	{
@@ -119,31 +86,10 @@ public:
 		Dvp,
 		Unknown
 	} sdIf_ = SensorDataInterface::Unknown;
-	bool haveRaw_ = false;
-	bool rawStreamEnable_ = false;
-	bool setSCFormat_ = false;
 
-	std::vector<std::vector<uint32_t>> mbufCodeLink_;
-	std::vector<Size> ispSizeRange_;
+protected:
+	void collectCompMbusCode() override;
 
-	std::vector<std::unique_ptr<FrameBuffer>> scBuffers_;
-
-	std::unique_ptr<DelayedControls> delayedCtrls_;
-
-	bool running_ = false;
-
-	void setDelayedControls(const ControlList &controls);
-	void setIspControls(const ControlList &controls);
-	bool findMatchVideoFormat(const PixelFormat &pixelFormat, const Size &size, V4L2PixelFormat &format);
-	Size getSuitableSensorSize();
-	bool isValidSize(const Size &size);
-
-private:
-	void collectCompMbusCode();
-	void collectISPSizeRange();
-
-private:
-	Size maxISPSize_;
 };
 
 int StarfiveCameraData::init()
@@ -233,8 +179,7 @@ int StarfiveCameraData::init()
 		ret = scDev_->open();
 		if (ret)
 			return ret;
-		scDev_->bufferReady.connect(this, &StarfiveCameraData::scBufferReady);
-		scDev_->frameStart.connect(this, &StarfiveCameraData::frameStarted);
+		connectSCSignal();
 	} else {
 		// Use the sensor own isp pipeline.
 		//MediaEntity *wrEntity = media_->getEntityByName("stf_vin0_wr");
@@ -256,8 +201,7 @@ int StarfiveCameraData::init()
 	if (!ret)
 		haveRaw_ = true;
 
-	video_->bufferReady.connect(this, &StarfiveCameraData::bufferReady);
-	raw_->bufferReady.connect(this, &StarfiveCameraData::bufferReady);
+	connectVideoSignal();
 
 	//MediaEntity *csiEntity = media_->getEntityByName("stf_csi0");
 	csiSubDev_ = std::make_unique<V4L2Subdevice>(media_->getEntityByName("stf_csi0"));
@@ -270,80 +214,6 @@ int StarfiveCameraData::init()
 	properties_ = sensor_->properties();
 
 	return 0;
-}
-
-int StarfiveCameraData::loadIPA()
-{
-	ipa_ = IPAManager::createIPA<ipa::starfive::IPAProxyStarfive>(pipe(), 1, 1);
-	int ret = 0;
-	
-	if (!ipa_) {
-		LOG(STARFIVE, Error) << "Can not create the IPA object.";
-		return -ENOENT;
-	}
-	
-	IPACameraSensorInfo sensorInfo{};
-	ret = sensor_->sensorInfo(&sensorInfo);
-	if (ret)
-		return ret;
-	
-	std::string fileName = sensor_->model() + ".json";
-	std::string configurationFile = ipa_->configurationFile(fileName);
-	IPASettings settings(configurationFile, sensor_->model());
-
-	ipa_->setDelayedControls.connect(this, &StarfiveCameraData::setDelayedControls);
-	ipa_->setIspControls.connect(this, &StarfiveCameraData::setIspControls);
-	
-	
-	return ipa_->init(settings, sensorInfo, sensor_->controls());
-}
-
-std::vector<SizeRange> StarfiveCameraData::sensorSizes() const
-{
-	std::vector<SizeRange> sizes;
-
-	for (const Size &size : sensor_->sizes(sensor_->mbusCodes().at(0)))
-		sizes.emplace_back(size, size);
-
-	return sizes;
-}
-
-bool StarfiveCameraData::isValidSize(const Size &size)
-{
-	if (!ispSizeRange_.size())
-		return false;
-	for(const Size &sz : ispSizeRange_) {
-		if(sz.width == size.width && sz.height == size.height)
-			return true;
-	}
-	return false;
-}
-
-void StarfiveCameraData::collectISPSizeRange()
-{
-	uint64_t maxArea = 0;
-
-	if (!mbufCodeLink_.size())
-		return;
-
-	const std::vector<uint32_t> &mbusCodes = mbufCodeLink_.front();
-	for (const uint32_t &code : mbusCodes) {
-		std::vector<Size> allSize = sensor_->sizes(code);
-
-		if (!allSize.size())
-			continue;
-
-		for(const Size &sz : allSize) {
-			if(sz.width <= STARFIVE_ISP_MAX_WIDTH && sz.height <= STARFIVE_ISP_MAX_HEIGHT) {
-				uint64_t area = sz.width * sz.height;
-				ispSizeRange_.push_back(sz);
-				if(area > maxArea) {
-					maxArea = area;
-					maxISPSize_ = sz;
-				}
-			}
-		}
-	}
 }
 
 void StarfiveCameraData::collectCompMbusCode()
@@ -423,84 +293,13 @@ void StarfiveCameraData::collectCompMbusCode()
 	collectISPSizeRange();
 }
 
-bool StarfiveCameraData::findMatchVideoFormat(const PixelFormat &pixelFormat, const Size &size, V4L2PixelFormat &format)
-{
-	if (!mbufCodeLink_.size())
-		return false;
-
-	const std::vector<uint32_t> &mbusCodes = mbufCodeLink_.back();
-	V4L2VideoDevice::Formats fmts;
-
-	for (auto &code : mbusCodes) {
-		fmts = video_->formats(code);
-		for (const auto &cur : fmts) {
-			if (!pixelFormat.isValid() || cur.first.toPixelFormat() == pixelFormat) {
-				for (auto &sr : cur.second) {
-					if (sr.contains(size)) {
-						format = cur.first;
-						return true;
-					}
-				}
-			}
-		}
-	}
-
-	return false;
-}
-
-Size StarfiveCameraData::getSuitableSensorSize()
-{
-	Size sensorResolution = sensor_->resolution();
-	if(sensorResolution.width <= STARFIVE_ISP_MAX_WIDTH && sensorResolution.height <= STARFIVE_ISP_MAX_HEIGHT)
-		return sensorResolution;
-
-	return maxISPSize_;
-}
-
-void StarfiveCameraData::bufferReady(FrameBuffer *buffer)
-{
-	PipelineHandler *pipe = Camera::Private::pipe();
-	Request *request = buffer->request();
-
-	request->metadata().set(controls::SensorTimestamp,
-				buffer->metadata().timestamp);
-
-	if (!pipe->completeBuffer(request, buffer))
-		return;
-
-	pipe->completeRequest(request);
-}
-
-void StarfiveCameraData::scBufferReady(FrameBuffer * buffer)
-{
-	if (running_) {
-		ipa_->statBufferReady(buffer->cookie(), delayedCtrls_->get(buffer->metadata().sequence));
-
-		scDev_->queueBuffer(buffer);
-	}
-}
-
-void StarfiveCameraData::frameStarted(uint32_t sequence)
-{
-	delayedCtrls_->applyControls(sequence);
-}
-
-void StarfiveCameraData::setDelayedControls(const ControlList & controls)
-{
-	delayedCtrls_->push(controls);
-}
-
-void StarfiveCameraData::setIspControls(const ControlList & controls)
-{
-	ControlList ctrlList = controls;
-
-	ispSubDev_->setControls(&ctrlList);
-}
-
 class StarfiveCameraConfiguration : public CameraConfiguration
 {
 public:
-	StarfiveCameraConfiguration(StarfiveCameraData *data);
+	StarfiveCameraConfiguration(StarfiveCameraDataBase *data) : CameraConfiguration()
+    {
+        data_ = data;
+    }
 
 	Status validate() override;
 
@@ -508,20 +307,14 @@ public:
 	Transform combinedTransform_;
 
 private:
-	StarfiveCameraData *data_;
+	StarfiveCameraDataBase *data_;
 };
-
-StarfiveCameraConfiguration::StarfiveCameraConfiguration(StarfiveCameraData *data)
-	: CameraConfiguration()
-{
-	data_ = data;
-}
 
 CameraConfiguration::Status StarfiveCameraConfiguration::validate()
 {
 	Status status = Valid;
 
-	if (config_.empty()) {
+	if (config_.empty() || data_->mbufCodeLink_.empty()) {
 		LOG(STARFIVE, Error) << "No configuration is found.";
 		return Invalid;
 	}
@@ -531,7 +324,7 @@ CameraConfiguration::Status StarfiveCameraConfiguration::validate()
 	if (transform != requestedTransform)
 		status = Adjusted;
 
-	std::vector<unsigned int> mbusCodes = utils::map_keys(mbusCodesToPixelFormat);
+	std::vector<unsigned int> mbusCodes = data_->mbufCodeLink_.front();
 
 	/* Cap the number of entries to the available streams. */
 	uint32_t kMaxStreams = !data_->disableISP ? 2 : 1;
@@ -613,6 +406,217 @@ CameraConfiguration::Status StarfiveCameraConfiguration::validate()
 	return status;
 }
 
+class StarfivPipelineAdapter : public StarfivPipelineAdapterBase
+{
+public:
+	StarfivPipelineAdapter(StarfiveCameraDataBase *data)
+		: StarfivPipelineAdapterBase(data)
+	{
+	}
+
+	uint32_t mbusCodeTrans(uint32_t code) override
+	{
+		auto mbusCTMap = mbusCodesTransform.find(code);
+		if (mbusCTMap == mbusCodesTransform.end())
+			return 0;
+		else
+			return mbusCTMap->second;
+	}
+
+	int setRawSubDevFormat(V4L2SubdeviceFormat &sensorFormat) override
+	{
+		StarfiveCameraData *data = dynamic_cast<StarfiveCameraData *>(data_);
+		return data->ispSubDev_->setFormat(6, &sensorFormat);
+	}
+
+	int setSSOutFormat(V4L2DeviceFormat &format) override
+	{
+		StarfiveCameraData *data = dynamic_cast<StarfiveCameraData *>(data_);
+		V4L2DeviceFormat orgFormat = format;
+
+		int ret = data->videoSS0_->setFormat(&orgFormat);
+		if (ret)
+			return ret;
+
+		ret = data->videoSS1_->setFormat(&format);
+		if (ret)
+			return ret;
+
+		return 0;
+	}
+
+	PixelFormat getSCPixFormat(Size size) override
+	{
+		StarfiveCameraData *data = dynamic_cast<StarfiveCameraData *>(data_);
+		std::vector<unsigned int> mbusCodes = data->mbufCodeLink_.front();
+		V4L2SubdeviceFormat sensorFormat = data->sensor_->getFormat(mbusCodes, size);
+		uint32_t mbusCode = mbusCodeTrans(sensorFormat.mbus_code);
+		V4L2VideoDevice::Formats formats = data->scDev_->formats(mbusCode);
+
+		if(formats.empty())
+			return PixelFormat();
+
+		return formats.begin()->first.toPixelFormat();
+	}
+
+	int linkPipeline() override;
+	int setupFormats(const V4L2DeviceFormat videoFormat) override;
+};
+
+int StarfivPipelineAdapter::linkPipeline()
+{
+	StarfiveCameraData *data = dynamic_cast<StarfiveCameraData *>(data_);
+	MediaDevice *sfMediaDev = data->media_;
+	MediaLink * csiLink = sfMediaDev->link("stf_csi0", 1, !data->disableISP ? "stf_isp0" : "stf_vin0_wr", 0);
+	MediaLink * dvpLink = sfMediaDev->link("stf_dvp0", 1, !data->disableISP ? "stf_isp0" : "stf_vin0_wr", 0);
+	int ret = 0;
+
+	switch(data->sdIf_) {
+	case StarfiveCameraData::SensorDataInterface::Mipi:
+		if (!csiLink) {
+			LOG(STARFIVE, Error) << "Can not find the link between CSI and ISP.";
+			return -ENODEV;
+		}
+		
+		if(dvpLink && (dvpLink->flags() & MEDIA_LNK_FL_ENABLED)) {
+			ret = dvpLink->setEnabled(false);
+			if(ret)
+				return ret;
+		}
+
+		if(!(csiLink->flags() & MEDIA_LNK_FL_ENABLED)) {
+			ret = csiLink->setEnabled(true);
+			if(ret)
+				return ret;
+		}
+		break;
+	case StarfiveCameraData::SensorDataInterface::Dvp:
+		if (!dvpLink) {
+			LOG(STARFIVE, Error) << "Can not find the link between DVP and ISP.";
+			return -ENODEV;
+		}
+
+		if(csiLink && (csiLink->flags() & MEDIA_LNK_FL_ENABLED)) {
+			ret = csiLink->setEnabled(false);
+			if(ret)
+				return ret;
+		}
+
+		if(!(dvpLink->flags() & MEDIA_LNK_FL_ENABLED)) {
+			ret = dvpLink->setEnabled(true);
+			if(ret)
+				return ret;
+		}
+		break;
+	default:
+		LOG(STARFIVE, Error) << "Unknown sensor data interface.";
+		return -ENODEV;
+	}
+
+	if (!data->disableISP) {
+		MediaLink *ispLink = sfMediaDev->link("stf_isp0", 1, "stf_vin0_isp0", 0);
+		if (ispLink) {
+			ret = ispLink->setEnabled(true);
+			if (ret)
+				return ret;
+		}
+		ispLink = sfMediaDev->link("stf_isp0", 6, "stf_vin0_isp0_raw", 0);
+		if (ispLink) {
+			ret = ispLink->setEnabled(true);
+			if (ret)
+				return ret;
+		}
+		ispLink = sfMediaDev->link("stf_isp0", 7, "stf_vin0_isp0_scd_y", 0);
+		if (ispLink) {
+			ret = ispLink->setEnabled(true);
+			if (ret)
+				return ret;
+		}
+	}
+
+	MediaLink *ssLink = sfMediaDev->link("stf_isp0", 2, "stf_vin0_isp0_ss0", 0);
+	if (ssLink) {
+		ret = ssLink->setEnabled(true);
+		if (ret)
+			return ret;
+	}
+	ssLink = sfMediaDev->link("stf_isp0", 3, "stf_vin0_isp0_ss1", 0);
+	if (ssLink) {
+		ret = ssLink->setEnabled(true);
+		if (ret)
+			return ret;
+	}
+	
+	return 0;
+}
+
+int StarfivPipelineAdapter::setupFormats(const V4L2DeviceFormat videoFormat)
+{
+	StarfiveCameraData *data = dynamic_cast<StarfiveCameraData *>(data_);
+	if (!data->mbufCodeLink_.size())
+		return 0;
+
+	//const MediaEntity *curEntity = nullptr;
+	V4L2SubdeviceFormat format{};
+	format.mbus_code = 0;
+	//format.size = data->sensor_->resolution();
+	format.size = data->getSuitableSensorSize();
+
+	const std::vector<uint32_t> &mbusCode = data->mbufCodeLink_.back();
+	V4L2VideoDevice::Formats fmts;
+
+	for (auto &code : mbusCode) {
+		fmts = data->video_->formats(code);
+		for (const auto &cur : fmts) {
+			if (videoFormat.fourcc == cur.first) {
+				for (auto &sr : cur.second) {
+					if (sr.contains(format.size)) {
+						format.mbus_code = code;
+						goto setupFormats_next;
+					}
+				}
+			}
+		}
+	}
+
+	if (!format.mbus_code) {
+		LOG(STARFIVE, Error) << "Can not find the suitable mbus_code in the video device.";
+		return -EINVAL;
+	}
+
+setupFormats_next:
+
+	V4L2SubdeviceFormat curFormat = format;
+	if (!data->disableISP) {
+		data->vinIspSubDev_->setFormat(0, &curFormat);
+		data->vinIspSubDev_->setFormat(1, &curFormat);
+
+		data->ispSubDev_->setFormat(1, &curFormat);
+
+		curFormat = data->sensor_->getFormat(data->mbufCodeLink_.front(), format.size);
+		data->ispSubDev_->setFormat(0, &curFormat);
+	} else {
+		data->wrSubDev_->setFormat(0, &curFormat);
+		data->wrSubDev_->setFormat(1, &curFormat);
+	}
+
+	if (StarfiveCameraData::SensorDataInterface::Mipi == data->sdIf_) {
+		data->csiSubDev_->setFormat(1, &curFormat);
+		if (MEDIA_BUS_FMT_AYUV8_1X32 == curFormat.mbus_code) {
+			format.mbus_code = MEDIA_BUS_FMT_UYVY8_2X8;
+			curFormat = format;
+		}
+		data->csiSubDev_->setFormat(0, &curFormat);
+		data->csiPhySubDev_->setFormat(0, &curFormat);
+		data->csiPhySubDev_->setFormat(1, &curFormat);
+	} else {
+		data->dvpDev_->setFormat(0, &curFormat);
+		data->dvpDev_->setFormat(1, &curFormat);
+	}
+
+	return 0;
+}
+
 class PipelineHandlerStarfive : public PipelineHandler
 {
 public:
@@ -633,21 +637,33 @@ public:
 	bool match(DeviceEnumerator *enumerator) override;
 
 private:
+	MediaDevice *findPipeline(DeviceEnumerator *enumerator);
+
 	StarfiveCameraData *cameraData(Camera *camera)
 	{
 		return static_cast<StarfiveCameraData *>(camera->_d());
 	}
 
-	int linkPipeline(std::unique_ptr<StarfiveCameraData> &data);
+	int linkPipeline()
+	{
+		return adapter_->linkPipeline();
+	}
 	int registerCameras(MediaDevice *sfMediaDev);
 
-	int setupFormats(StarfiveCameraData *data, const V4L2DeviceFormat videoFormat);
+	int setupFormats(const V4L2DeviceFormat videoFormat)
+	{
+		return adapter_->setupFormats(videoFormat);
+	}
 
 	int freeBuffers(Camera *camera);
+
+private:
+	std::unique_ptr<StarfivPipelineAdapterBase> adapter_;
+	Starfive::PipelineType pplType_;
 };
 
 PipelineHandlerStarfive::PipelineHandlerStarfive(CameraManager *manager)
-	: PipelineHandler(manager)
+	: PipelineHandler(manager), pplType_(Starfive::PipelineType::pplt_unknown)
 {
 }
 
@@ -682,14 +698,21 @@ PipelineHandlerStarfive::generateConfiguration(Camera *camera, const StreamRoles
 				break;
 
 			case StreamRole::Raw: {
-				std::vector<unsigned int> mbusCodes = utils::map_keys(mbusCodesToPixelFormat);
+				if(!data->haveRaw_)
+					continue;
+
+				std::vector<unsigned int> mbusCodes = data->mbufCodeLink_.front();
 
 				V4L2SubdeviceFormat sensorFormat = data->sensor_->getFormat(mbusCodes, sensorResolution);
-				if (!sensorFormat.mbus_code) {
+				if (!sensorFormat.mbus_code || !adapter_->mbusCodeTrans(sensorFormat.mbus_code)) {
 					break;
 				}
 
-				pixelFormat = mbusCodesToPixelFormat.at(sensorFormat.mbus_code);
+				V4L2VideoDevice::Formats videoFormat = data->raw_->formats(adapter_->mbusCodeTrans(sensorFormat.mbus_code));
+				if(videoFormat.empty())
+					break;
+
+				pixelFormat = videoFormat.begin()->first.toPixelFormat();
 				sensorResolution = sensorFormat.size;
 				bufferCount = STREAM_BUFFER_COUNT;
 				colorSpace = ColorSpace::Raw;
@@ -739,77 +762,6 @@ PipelineHandlerStarfive::generateConfiguration(Camera *camera, const StreamRoles
 	return config;
 }
 
-int PipelineHandlerStarfive::setupFormats(StarfiveCameraData *data, const V4L2DeviceFormat videoFormat)
-{
-	if (!data->mbufCodeLink_.size())
-		return 0;
-
-	//const MediaEntity *curEntity = nullptr;
-	V4L2SubdeviceFormat format{};
-	format.mbus_code = 0;
-	//format.size = data->sensor_->resolution();
-	format.size = data->getSuitableSensorSize();
-
-	const std::vector<uint32_t> &mbusCode = data->mbufCodeLink_.back();
-	V4L2VideoDevice::Formats fmts;
-
-	for (auto &code : mbusCode) {
-		fmts = data->video_->formats(code);
-		for (const auto &cur : fmts) {
-			if (videoFormat.fourcc == cur.first) {
-				for (auto &sr : cur.second) {
-					if (sr.contains(format.size)) {
-						format.mbus_code = code;
-						goto setupFormats_next;
-					}
-				}
-			}
-		}
-	}
-
-	if (!format.mbus_code) {
-		LOG(STARFIVE, Error) << "Can not find the suitable mbus_code in the video device.";
-		return -EINVAL;
-	}
-
-setupFormats_next:
-
-	V4L2SubdeviceFormat curFormat = format;
-	if (!data->disableISP) {
-		data->vinIspSubDev_->setFormat(0, &curFormat);
-		data->vinIspSubDev_->setFormat(1, &curFormat);
-
-		data->ispSubDev_->setFormat(1, &curFormat);
-		for (const auto &m : mbusCodesTransform) {
-			if (m.second == format.mbus_code) {
-				format.mbus_code = m.first;
-				curFormat = format;
-				data->ispSubDev_->setFormat(0, &curFormat);
-				break;
-			}
-		}
-	} else {
-		data->wrSubDev_->setFormat(0, &curFormat);
-		data->wrSubDev_->setFormat(1, &curFormat);
-	}
-
-	if (StarfiveCameraData::SensorDataInterface::Mipi == data->sdIf_) {
-		data->csiSubDev_->setFormat(1, &curFormat);
-		if (MEDIA_BUS_FMT_AYUV8_1X32 == curFormat.mbus_code) {
-			format.mbus_code = MEDIA_BUS_FMT_UYVY8_2X8;
-			curFormat = format;
-		}
-		data->csiSubDev_->setFormat(0, &curFormat);
-		data->csiPhySubDev_->setFormat(0, &curFormat);
-		data->csiPhySubDev_->setFormat(1, &curFormat);
-	} else {
-		data->dvpDev_->setFormat(0, &curFormat);
-		data->dvpDev_->setFormat(1, &curFormat);
-	}
-
-	return 0;
-}
-
 int PipelineHandlerStarfive::configure(Camera *camera, CameraConfiguration *c)
 {
 	StarfiveCameraConfiguration *config =
@@ -819,7 +771,7 @@ int PipelineHandlerStarfive::configure(Camera *camera, CameraConfiguration *c)
 	int ret = 0;
 
 	// Set the sensor's format
-	std::vector<unsigned int> mbusCodes = utils::map_keys(mbusCodesToPixelFormat);
+	std::vector<unsigned int> mbusCodes = data->mbufCodeLink_.front();
 	//Size sensorResolution = data->sensor_->resolution();
 	Size sensorResolution = data->getSuitableSensorSize();
 	V4L2SubdeviceFormat sensorFormat = data->sensor_->getFormat(mbusCodes, sensorResolution);
@@ -828,15 +780,14 @@ int PipelineHandlerStarfive::configure(Camera *camera, CameraConfiguration *c)
 		return ret;
 
 	// Set the sensor transform.
-	auto mbusCTMap = mbusCodesTransform.find(sensorFormat.mbus_code);
-	if (mbusCTMap == mbusCodesTransform.end()) {
+	sensorFormat.mbus_code = adapter_->mbusCodeTrans(sensorFormat.mbus_code);
+	if(!sensorFormat.mbus_code) {
 		LOG(STARFIVE, Error) << "Can not find the mbus_code for the pad 6 of the ISP sub-device.";
 		return -EINVAL;
 	}
 
 	// Configure the isp pad 6.
-	sensorFormat.mbus_code = mbusCTMap->second;
-	ret = data->ispSubDev_->setFormat(6, &sensorFormat);
+	ret = adapter_->setRawSubDevFormat(sensorFormat);
 	if (ret)
 		return ret;
 
@@ -902,22 +853,16 @@ int PipelineHandlerStarfive::configure(Camera *camera, CameraConfiguration *c)
 
 			format.fourcc = data->video_->toV4L2PixelFormat(cfg.pixelFormat);
 			format.size = cfg.size;
-			ret = data->videoSS0_->setFormat(&format);
+			ret = adapter_->setSSOutFormat(format);
 			if (ret)
 				return ret;
 
-			format.fourcc = data->video_->toV4L2PixelFormat(cfg.pixelFormat);
-			format.size = cfg.size;
-			ret = data->videoSS1_->setFormat(&format);
-			if (ret)
-				return ret;
-
-			ret = setupFormats(data, format);
+			ret = setupFormats(format);
 			if (ret)
 				return ret;
 
 			if (!data->disableISP && !data->setSCFormat_) {
-				PixelFormat pixelFormat = mbusCodesToPixelFormat.at(sensorFormat.mbus_code);
+				PixelFormat pixelFormat = adapter_->getSCPixFormat(cfg.size);
 				V4L2DeviceFormat scFormat = {};
 
 				scFormat.fourcc = data->raw_->toV4L2PixelFormat(pixelFormat);
@@ -1089,103 +1034,25 @@ int PipelineHandlerStarfive::queueRequestDevice(Camera *camera, Request *request
 	return ret;
 }
 
-int PipelineHandlerStarfive::linkPipeline(std::unique_ptr<StarfiveCameraData> &data)
-{
-	MediaDevice *sfMediaDev = data->media_;
-	MediaLink * csiLink = sfMediaDev->link("stf_csi0", 1, !data->disableISP ? "stf_isp0" : "stf_vin0_wr", 0);
-	MediaLink * dvpLink = sfMediaDev->link("stf_dvp0", 1, !data->disableISP ? "stf_isp0" : "stf_vin0_wr", 0);
-	int ret = 0;
-
-	switch(data->sdIf_) {
-	case StarfiveCameraData::SensorDataInterface::Mipi:
-		if (!csiLink) {
-			LOG(STARFIVE, Error) << "Can not find the link between CSI and ISP.";
-			return -ENODEV;
-		}
-		
-		if(dvpLink && (dvpLink->flags() & MEDIA_LNK_FL_ENABLED)) {
-			ret = dvpLink->setEnabled(false);
-			if(ret)
-				return ret;
-		}
-
-		if(!(csiLink->flags() & MEDIA_LNK_FL_ENABLED)) {
-			ret = csiLink->setEnabled(true);
-			if(ret)
-				return ret;
-		}
-		break;
-	case StarfiveCameraData::SensorDataInterface::Dvp:
-		if (!dvpLink) {
-			LOG(STARFIVE, Error) << "Can not find the link between DVP and ISP.";
-			return -ENODEV;
-		}
-
-		if(csiLink && (csiLink->flags() & MEDIA_LNK_FL_ENABLED)) {
-			ret = csiLink->setEnabled(false);
-			if(ret)
-				return ret;
-		}
-
-		if(!(dvpLink->flags() & MEDIA_LNK_FL_ENABLED)) {
-			ret = dvpLink->setEnabled(true);
-			if(ret)
-				return ret;
-		}
-		break;
-	default:
-		LOG(STARFIVE, Error) << "Unknown sensor data interface.";
-		return -ENODEV;
-	}
-
-	if (!data->disableISP) {
-		MediaLink *ispLink = sfMediaDev->link("stf_isp0", 1, "stf_vin0_isp0", 0);
-		if (ispLink) {
-			ret = ispLink->setEnabled(true);
-			if (ret)
-				return ret;
-		}
-		ispLink = sfMediaDev->link("stf_isp0", 6, "stf_vin0_isp0_raw", 0);
-		if (ispLink) {
-			ret = ispLink->setEnabled(true);
-			if (ret)
-				return ret;
-		}
-		ispLink = sfMediaDev->link("stf_isp0", 7, "stf_vin0_isp0_scd_y", 0);
-		if (ispLink) {
-			ret = ispLink->setEnabled(true);
-			if (ret)
-				return ret;
-		}
-	}
-
-	MediaLink *ssLink = sfMediaDev->link("stf_isp0", 2, "stf_vin0_isp0_ss0", 0);
-	if (ssLink) {
-		ret = ssLink->setEnabled(true);
-		if (ret)
-			return ret;
-	}
-	ssLink = sfMediaDev->link("stf_isp0", 3, "stf_vin0_isp0_ss1", 0);
-	if (ssLink) {
-		ret = ssLink->setEnabled(true);
-		if (ret)
-			return ret;
-	}
-	
-	return 0;
-}
-
 int PipelineHandlerStarfive::registerCameras(MediaDevice *sfMediaDev)
 {
 	int ret = 0;
 
-	std::unique_ptr<StarfiveCameraData> data = std::make_unique<StarfiveCameraData>(this, sfMediaDev);
+	std::unique_ptr<StarfiveCameraDataBase> data = Starfive::PipelineType::pplt_normal == pplType_ ?
+		std::unique_ptr<StarfiveCameraDataBase>(new StarfiveCameraData(this, sfMediaDev)) :
+		std::unique_ptr<StarfiveCameraDataBase>(new StarfiveSimpleCameraData(this, sfMediaDev));
 
 	ret = data->init();
 	if (ret)
 		return ret;
 
-	linkPipeline(data);
+	adapter_ = Starfive::PipelineType::pplt_normal == pplType_ ? 
+		std::unique_ptr<StarfivPipelineAdapterBase>(new StarfivPipelineAdapter(data.get())) :
+		std::unique_ptr<StarfivPipelineAdapterBase>(new StarfivSimplePipelineAdapter(data.get()));
+
+	ret = linkPipeline();
+	if (ret)
+		return ret;
 
 	std::unordered_map<uint32_t, DelayedControls::ControlParams> params = {
 		{ V4L2_CID_ANALOGUE_GAIN, { 1, false } },
@@ -1205,6 +1072,7 @@ int PipelineHandlerStarfive::registerCameras(MediaDevice *sfMediaDev)
 	PipelineHandler::registerCamera(std::move(camera));
 
 	return 0;
+	
 }
 
 int PipelineHandlerStarfive::freeBuffers(Camera * camera)
@@ -1219,14 +1087,38 @@ int PipelineHandlerStarfive::freeBuffers(Camera * camera)
 	return 0;
 }
 
+MediaDevice *PipelineHandlerStarfive::findPipeline(DeviceEnumerator *enumerator)
+{
+	MediaDevice *sfMediaDev = nullptr;
+	{
+		DeviceMatch sf_dm("jh7110-vin");
+		sf_dm.add("stf_vin0_wr_video0");
+		sf_dm.add("stf_vin0_isp0_video1");
+		sf_dm.add("stf_vin0_isp0_raw_video6");
+
+		sfMediaDev = acquireMediaDevice(enumerator, sf_dm);
+		if(sfMediaDev) {
+			pplType_ = Starfive::PipelineType::pplt_normal;
+			return sfMediaDev;
+		}
+	}
+
+	{
+		DeviceMatch sf_dm("starfive-camss");
+    	sf_dm.add("capture_yuv");
+		sfMediaDev = acquireMediaDevice(enumerator, sf_dm);
+		if(sfMediaDev) {
+			pplType_ = Starfive::PipelineType::pplt_simple;
+			return sfMediaDev;
+		}
+	}
+
+	return nullptr;
+}
+
 bool PipelineHandlerStarfive::match(DeviceEnumerator *enumerator)
 {
-	DeviceMatch sf_dm("jh7110-vin");
-	sf_dm.add("stf_vin0_wr_video0");
-	sf_dm.add("stf_vin0_isp0_video1");
-	sf_dm.add("stf_vin0_isp0_raw_video6");
-
-	MediaDevice *sfMediaDev = acquireMediaDevice(enumerator, sf_dm);
+	MediaDevice *sfMediaDev = findPipeline(enumerator);
 	if (!sfMediaDev)
 		return false;
 
