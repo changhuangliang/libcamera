@@ -3,6 +3,7 @@
 conf_files = files([
     'jh7110-default.json',
     'imx219.json',
+    'imx708.json',
 ])
 
 install_data(conf_files,

@@ -47,7 +47,11 @@
 namespace libcamera {
 
 LOG_DEFINE_CATEGORY(STARFIVE)
+
 #define STREAM_BUFFER_COUNT						4
+#define STARFIVE_ISP_MAX_WIDTH					1920
+#define STARFIVE_ISP_MAX_HEIGHT					1080
+
 class PipelineHandlerStarfive;
 
 const std::map<uint32_t, PixelFormat> mbusCodesToPixelFormat = {
@@ -120,6 +124,7 @@ public:
 	bool setSCFormat_ = false;
 
 	std::vector<std::vector<uint32_t>> mbufCodeLink_;
+	std::vector<Size> ispSizeRange_;
 
 	std::vector<std::unique_ptr<FrameBuffer>> scBuffers_;
 
@@ -130,9 +135,15 @@ public:
 	void setDelayedControls(const ControlList &controls);
 	void setIspControls(const ControlList &controls);
 	bool findMatchVideoFormat(const PixelFormat &pixelFormat, const Size &size, V4L2PixelFormat &format);
+	Size getSuitableSensorSize();
+	bool isValidSize(const Size &size);
 
 private:
 	void collectCompMbusCode();
+	void collectISPSizeRange();
+
+private:
+	Size maxISPSize_;
 };
 
 int StarfiveCameraData::init()
@@ -279,7 +290,7 @@ int StarfiveCameraData::loadIPA()
 	std::string fileName = sensor_->model() + ".json";
 	std::string configurationFile = ipa_->configurationFile(fileName);
 	IPASettings settings(configurationFile, sensor_->model());
-	
+
 	ipa_->setDelayedControls.connect(this, &StarfiveCameraData::setDelayedControls);
 	ipa_->setIspControls.connect(this, &StarfiveCameraData::setIspControls);
 	
@@ -297,6 +308,44 @@ std::vector<SizeRange> StarfiveCameraData::sensorSizes() const
 	return sizes;
 }
 
+bool StarfiveCameraData::isValidSize(const Size &size)
+{
+	if (!ispSizeRange_.size())
+		return false;
+	for(const Size &sz : ispSizeRange_) {
+		if(sz.width == size.width && sz.height == size.height)
+			return true;
+	}
+	return false;
+}
+
+void StarfiveCameraData::collectISPSizeRange()
+{
+	uint64_t maxArea = 0;
+
+	if (!mbufCodeLink_.size())
+		return;
+
+	const std::vector<uint32_t> &mbusCodes = mbufCodeLink_.front();
+	for (const uint32_t &code : mbusCodes) {
+		std::vector<Size> allSize = sensor_->sizes(code);
+
+		if (!allSize.size())
+			continue;
+
+		for(const Size &sz : allSize) {
+			if(sz.width <= STARFIVE_ISP_MAX_WIDTH && sz.height <= STARFIVE_ISP_MAX_HEIGHT) {
+				uint64_t area = sz.width * sz.height;
+				ispSizeRange_.push_back(sz);
+				if(area > maxArea) {
+					maxArea = area;
+					maxISPSize_ = sz;
+				}
+			}
+		}
+	}
+}
+
 void StarfiveCameraData::collectCompMbusCode()
 {
 	const std::vector<unsigned int> &mbusCodes = sensor_->mbusCodes();
@@ -308,8 +357,18 @@ void StarfiveCameraData::collectCompMbusCode()
 	// Collect the sensor mbus codes.
 	for (const uint32_t &code : mbusCodes) {
 		std::vector<Size> allSize = sensor_->sizes(code);
+		bool hasSuitableSize = false;
 		if (!allSize.size())
 			continue;
+		for(const Size &sz : allSize) {
+			if(sz.width <= STARFIVE_ISP_MAX_WIDTH && sz.height <= STARFIVE_ISP_MAX_HEIGHT) {
+				hasSuitableSize = true;
+				break;
+			}
+		}
+		if(!hasSuitableSize)
+			continue;
+		
 		V4L2SubdeviceFormat sensorFormat = sensor_->getFormat(mbusCodes, allSize[0]);
 		if (!disableISP) {
 			if (ColorSpace::Primaries::Raw == sensorFormat.colorSpace->primaries)
@@ -360,6 +419,8 @@ void StarfiveCameraData::collectCompMbusCode()
 		fmts = wrSubDev_->formats(0);
 		mbufCodeLink_.push_back(takeMatchCode(sinkCodes, fmts));
 	}
+
+	collectISPSizeRange();
 }
 
 bool StarfiveCameraData::findMatchVideoFormat(const PixelFormat &pixelFormat, const Size &size, V4L2PixelFormat &format)
@@ -385,6 +446,15 @@ bool StarfiveCameraData::findMatchVideoFormat(const PixelFormat &pixelFormat, co
 	}
 
 	return false;
+}
+
+Size StarfiveCameraData::getSuitableSensorSize()
+{
+	Size sensorResolution = sensor_->resolution();
+	if(sensorResolution.width <= STARFIVE_ISP_MAX_WIDTH && sensorResolution.height <= STARFIVE_ISP_MAX_HEIGHT)
+		return sensorResolution;
+
+	return maxISPSize_;
 }
 
 void StarfiveCameraData::bufferReady(FrameBuffer *buffer)
@@ -599,7 +669,8 @@ PipelineHandlerStarfive::generateConfiguration(Camera *camera, const StreamRoles
 			PixelFormat pixelFormat;
 			Size sensorResolution;
 
-			sensorResolution = data->sensor_->resolution();
+			//sensorResolution = data->sensor_->resolution();
+			sensorResolution = data->getSuitableSensorSize();
 			switch (role) {
 			case StreamRole::StillCapture:
 			case StreamRole::Viewfinder:
@@ -676,7 +747,8 @@ int PipelineHandlerStarfive::setupFormats(StarfiveCameraData *data, const V4L2De
 	//const MediaEntity *curEntity = nullptr;
 	V4L2SubdeviceFormat format{};
 	format.mbus_code = 0;
-	format.size = data->sensor_->resolution();
+	//format.size = data->sensor_->resolution();
+	format.size = data->getSuitableSensorSize();
 
 	const std::vector<uint32_t> &mbusCode = data->mbufCodeLink_.back();
 	V4L2VideoDevice::Formats fmts;
@@ -748,7 +820,8 @@ int PipelineHandlerStarfive::configure(Camera *camera, CameraConfiguration *c)
 
 	// Set the sensor's format
 	std::vector<unsigned int> mbusCodes = utils::map_keys(mbusCodesToPixelFormat);
-	Size sensorResolution = data->sensor_->resolution();
+	//Size sensorResolution = data->sensor_->resolution();
+	Size sensorResolution = data->getSuitableSensorSize();
 	V4L2SubdeviceFormat sensorFormat = data->sensor_->getFormat(mbusCodes, sensorResolution);
 	ret = data->sensor_->setFormat(&sensorFormat, config->combinedTransform_);
 	if (ret)
@@ -772,6 +845,15 @@ int PipelineHandlerStarfive::configure(Camera *camera, CameraConfiguration *c)
 	for (unsigned int i = 0; i < config->size(); ++i) {
 		StreamConfiguration &cfg = (*config)[i];
 		Stream *stream = cfg.stream();
+
+		if(!data->disableISP) {
+			if(!data->isValidSize(cfg.size)) {
+				LOG(STARFIVE, Error) << "The ISP can not support " << cfg.size.width << "x" << cfg.size.height;
+				LOG(STARFIVE, Info) << "You can try " << sensorResolution.width << "x" << 
+					sensorResolution.height << ".";
+				return -EINVAL;
+			}
+		}
 
 		if (stream == &data->rawStream_) {
 			sensorFormat = data->sensor_->getFormat(mbusCodes, cfg.size);
