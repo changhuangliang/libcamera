@@ -8,6 +8,7 @@ starfive_ipa_sources = files([
     'starfive.cpp',
     'sensor_helper.cpp',
     'sensor_helper_imx219.cpp',
+    'sensor_helper_imx708.cpp',
 ])
 
 mod = shared_module(ipa_name,
