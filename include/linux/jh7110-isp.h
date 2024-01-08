@@ -13,6 +13,8 @@
 #ifndef __JH7110_ISP_H_
 #define __JH7110_ISP_H_
 
+#include <linux/v4l2-controls.h>
+
 #define JH7110_ISP_MODULE_WB_SETTING			(1U << 0)
 #define JH7110_ISP_MODULE_CAR_SETTING			(1U << 1)
 #define JH7110_ISP_MODULE_CCM_SETTING			(1U << 2)
@@ -382,10 +384,10 @@ struct jh7110_isp_sc_buffer {
 #define V4L2_CID_USER_JH7110_ISP_OUTSS1_SETTING \
 				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0012)
 				
-typedef jh7110_isp_obc_win_size			jh7110_isp_blacklevel_win_size;
-typedef jh7110_isp_obc_gain				jh7110_isp_blacklevel_gain;
-typedef jh7110_isp_obc_offset			jh7110_isp_blacklevel_offset;
-typedef jh7110_isp_obc_setting			jh7110_isp_blacklevel_setting;
+typedef struct jh7110_isp_obc_win_size			jh7110_isp_blacklevel_win_size;
+typedef struct jh7110_isp_obc_gain				jh7110_isp_blacklevel_gain;
+typedef struct jh7110_isp_obc_offset			jh7110_isp_blacklevel_offset;
+typedef struct jh7110_isp_obc_setting			jh7110_isp_blacklevel_setting;
 
 struct jh7110_isp_outss_setting {
 	__u8 which;

@@ -275,20 +275,15 @@ void StarfiveSimpleCameraData::collectCompMbusCode()
     setSizeRange(Size(1920, 1080));
 }
 
-//void StarfiveSimpleCameraData::setSimpleIspControls(const ControlList &controls)
-//{
-//    //ControlList ctrlList = controls;
-//    for(const auto &ctrl: controls) {
-//        auto value = starfive::control::ispControls.find(ctrl.first);
-//        if(value != starfive::control::ispControls.end()) {
-//            // !!!!!!!!!!!!!!!!!!!!!!!!!
-//        }
-//    }
-//}
-
 void StarfiveSimpleCameraData::regBufferReady(FrameBuffer *buffer)
 {
     freeOPBufferCookie_.push_back(buffer->cookie());
+}
+
+void StarfiveSimpleCameraData::processAGCControls(const ControlList &controls)
+{
+    delayedCtrls_->push(controls);
+    delayedCtrls_->applyControls(scSequence_);
 }
 
 struct CtrlInBufInfo

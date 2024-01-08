@@ -18,7 +18,7 @@ class StarfiveCameraDataBase : public Camera::Private
 {
 public:
 	StarfiveCameraDataBase(PipelineHandler *pipe, MediaDevice *media)
-		: Camera::Private(pipe), disableISP(false), media_(media)
+		: Camera::Private(pipe), disableISP(false), media_(media), scSequence_(0)
 	{
 	}
 
@@ -75,6 +75,7 @@ public:
 	void scBufferReady(FrameBuffer *buffer)
     {
         if (running_) {
+            scSequence_ = buffer->metadata().sequence;
             ipa_->statBufferReady(buffer->cookie(), delayedCtrls_->get(buffer->metadata().sequence));
 
             scDev_->queueBuffer(buffer);
@@ -88,7 +89,8 @@ public:
 
 	void setDelayedControls(const ControlList &controls)
     {
-        delayedCtrls_->push(controls);
+        //delayedCtrls_->push(controls);
+        processAGCControls(controls);
     }
 
 	void setIspControls(const ControlList &controls)
@@ -194,6 +196,11 @@ protected:
 
 	virtual void collectCompMbusCode() = 0;
 
+    virtual void processAGCControls(const ControlList &controls)
+    {
+        delayedCtrls_->push(controls);
+    }
+
     virtual void processIPAControls(ControlList &ctrlList)
     {
         ispSubDev_->setControls(&ctrlList);
@@ -228,6 +235,8 @@ protected:
 
 protected:
 	Size maxISPSize_;
+
+    uint32_t scSequence_;
 };
 
 class StarfivPipelineAdapterBase
@@ -293,19 +302,12 @@ public:
     std::list<uint32_t> freeOPBufferCookie_;
 
 protected:
-    //void setSimpleIspControls(const ControlList &controls);
-
-    //virtual void connectIPASignal() override
-    //{
-    //    StarfiveCameraDataBase::connectIPASignal();
-    //    ipa_->setIspControls.disconnect();
-    //    ipa_->setIspControls.connect(this, &StarfiveSimpleCameraData::setSimpleIspControls);
-    //}
 
     void connectVideoSignal() override;
 
     void collectCompMbusCode() override;
     void processIPAControls(ControlList &ctrlList) override;
+    void processAGCControls(const ControlList &controls) override;
 
 	void setSizeRange(Size sz) {
 		ispSizeRange_.push_back(sz);
