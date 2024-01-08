@@ -45,10 +45,83 @@
 #include "libcamera/internal/mapped_framebuffer.h"
 
 #include "starfive.h"
+#include "linux/jh7110-isp.h"
 
 namespace libcamera {
 
-//class PipelineHandlerStarfiveSimple;
+#define ISP_OUTPUT_PARAMS_MBUSCODE                  0x7001
+#define ISP_YUV_OUTPUT_MBUSCODE                     0x2004
+#define ISP_SC_OUTPUT_MBUSCODE                      0x7001
+
+#define V4L2_META_FMT_STF_ISP_PARAMS	            v4l2_fourcc('S', 'T', 'F', 'P')
+#define V4L2_META_FMT_STF_ISP_STAT_3A               v4l2_fourcc('S', 'T', 'F', 'S')
+
+#define REGISTER_BUFFER_NUMBER                      4
+
+namespace starfive::control {
+
+const Control<Span<const uint8_t, sizeof(jh7110_isp_wb_setting)>> SFWBGainCtrl(V4L2_CID_USER_JH7110_ISP_WB_SETTING, "StarfiveColourGains");
+const Control<Span<const uint8_t, sizeof(jh7110_isp_car_setting)>> SFCarCtrl(V4L2_CID_USER_JH7110_ISP_CAR_SETTING, "StarfiveCar");
+const Control<Span<const uint8_t, sizeof(jh7110_isp_ccm_setting)>> SFCCMCtrl(V4L2_CID_USER_JH7110_ISP_CCM_SETTING, "StarfiveCCM");
+const Control<Span<const uint8_t, sizeof(jh7110_isp_cfa_setting)>> SFCFACtrl(V4L2_CID_USER_JH7110_ISP_CFA_SETTING, "StarfiveCFA");
+const Control<Span<const uint8_t, sizeof(jh7110_isp_ctc_setting)>> SFCTCCtrl(V4L2_CID_USER_JH7110_ISP_CTC_SETTING, "StarfiveCTC");
+const Control<Span<const uint8_t, sizeof(jh7110_isp_dbc_setting)>> SFDBCCtrl(V4L2_CID_USER_JH7110_ISP_DBC_SETTING, "StarfiveDBC");
+const Control<Span<const uint8_t, sizeof(jh7110_isp_dnyuv_setting)>> SFDNYUVCtrl(V4L2_CID_USER_JH7110_ISP_DNYUV_SETTING, "StarfiveDNYUV");
+const Control<Span<const uint8_t, sizeof(jh7110_isp_gmargb_setting)>> SFGMARGBCtrl(V4L2_CID_USER_JH7110_ISP_GMARGB_SETTING, "StarfiveGMARGB");
+const Control<Span<const uint8_t, sizeof(jh7110_isp_lccf_setting)>> SFLCCFCtrl(V4L2_CID_USER_JH7110_ISP_LCCF_SETTING, "StarfiveLCCF");
+const Control<Span<const uint8_t, sizeof(jh7110_isp_blacklevel_setting)>> SFOBCCtrl(V4L2_CID_USER_JH7110_ISP_OBC_SETTING, "StarfiveOBC");
+const Control<Span<const uint8_t, sizeof(jh7110_isp_oecf_setting)>> SFOECFCtrl(V4L2_CID_USER_JH7110_ISP_OECF_SETTING, "StarfiveOECF");
+const Control<Span<const uint8_t, sizeof(jh7110_isp_r2y_setting)>> SFR2YCtrl(V4L2_CID_USER_JH7110_ISP_R2Y_SETTING, "StarfiveR2Y");
+const Control<Span<const uint8_t, sizeof(jh7110_isp_sat_setting)>> SFSATCtrl(V4L2_CID_USER_JH7110_ISP_SAT_SETTING, "StarfiveSAT");
+const Control<Span<const uint8_t, sizeof(jh7110_isp_sharp_setting)>> SFSHRPCtrl(V4L2_CID_USER_JH7110_ISP_SHRP_SETTING, "StarfiveSHRP");
+const Control<Span<const uint8_t, sizeof(jh7110_isp_ycrv_setting)>> SFYCRVCtrl(V4L2_CID_USER_JH7110_ISP_YCRV_SETTING, "StarfiveYCRV");
+const Control<Span<const uint8_t, sizeof(jh7110_isp_sc_setting)>> SFSCCtrl(V4L2_CID_USER_JH7110_ISP_STAT_SETTING, "StarfiveSC");
+const Control<Span<const uint8_t, sizeof(jh7110_isp_outss_setting)>> SFOUTSS0Ctrl(V4L2_CID_USER_JH7110_ISP_OUTSS0_SETTING, "StarfiveSS0");
+const Control<Span<const uint8_t, sizeof(jh7110_isp_outss_setting)>> SFOUTSS1Ctrl(V4L2_CID_USER_JH7110_ISP_OUTSS1_SETTING, "StarfiveSS1");
+
+const ControlIdMap ispControls {
+    { V4L2_CID_USER_JH7110_ISP_WB_SETTING, &SFWBGainCtrl },
+    { V4L2_CID_USER_JH7110_ISP_CAR_SETTING, &SFCarCtrl },
+    { V4L2_CID_USER_JH7110_ISP_CCM_SETTING, &SFCCMCtrl },
+    { V4L2_CID_USER_JH7110_ISP_CFA_SETTING, &SFCFACtrl },
+    { V4L2_CID_USER_JH7110_ISP_CTC_SETTING, &SFCTCCtrl },
+    { V4L2_CID_USER_JH7110_ISP_DBC_SETTING, &SFDBCCtrl },
+    { V4L2_CID_USER_JH7110_ISP_DNYUV_SETTING, &SFDNYUVCtrl },
+    { V4L2_CID_USER_JH7110_ISP_GMARGB_SETTING, &SFGMARGBCtrl },
+    { V4L2_CID_USER_JH7110_ISP_LCCF_SETTING, &SFLCCFCtrl },
+    { V4L2_CID_USER_JH7110_ISP_OBC_SETTING, &SFOBCCtrl },
+    { V4L2_CID_USER_JH7110_ISP_OECF_SETTING, &SFOECFCtrl },
+    { V4L2_CID_USER_JH7110_ISP_R2Y_SETTING, &SFR2YCtrl },
+    { V4L2_CID_USER_JH7110_ISP_SAT_SETTING, &SFSATCtrl },
+    { V4L2_CID_USER_JH7110_ISP_SHRP_SETTING, &SFSHRPCtrl },
+    { V4L2_CID_USER_JH7110_ISP_YCRV_SETTING, &SFYCRVCtrl },
+    { V4L2_CID_USER_JH7110_ISP_STAT_SETTING, &SFSCCtrl },
+    //{ V4L2_CID_USER_JH7110_ISP_OUTSS0_SETTING, &SFOUTSS0Ctrl },
+    //{ V4L2_CID_USER_JH7110_ISP_OUTSS1_SETTING, &SFOUTSS1Ctrl }
+};
+
+static const ControlInfoMap::Map ipaControls{
+    { &SFWBGainCtrl, ControlInfo((uint8_t)0, (uint8_t)0) },
+    { &SFCarCtrl, ControlInfo((uint8_t)0, (uint8_t)0) },
+    { &SFCCMCtrl, ControlInfo((uint8_t)0, (uint8_t)0) },
+    { &SFCFACtrl, ControlInfo((uint8_t)0, (uint8_t)0) },
+    { &SFCTCCtrl, ControlInfo((uint8_t)0, (uint8_t)0) },
+    { &SFDBCCtrl, ControlInfo((uint8_t)0, (uint8_t)0) },
+    { &SFDNYUVCtrl, ControlInfo((uint8_t)0, (uint8_t)0) },
+    { &SFGMARGBCtrl, ControlInfo((uint8_t)0, (uint8_t)0) },
+    { &SFLCCFCtrl, ControlInfo((uint8_t)0, (uint8_t)0) },
+    { &SFOBCCtrl, ControlInfo((uint8_t)0, (uint8_t)0) },
+    { &SFOECFCtrl, ControlInfo((uint8_t)0, (uint8_t)0) },
+    { &SFR2YCtrl, ControlInfo((uint8_t)0, (uint8_t)0) },
+    { &SFSATCtrl, ControlInfo((uint8_t)0, (uint8_t)0) },
+    { &SFSHRPCtrl, ControlInfo((uint8_t)0, (uint8_t)0) },
+    { &SFYCRVCtrl, ControlInfo((uint8_t)0, (uint8_t)0) },
+    { &SFSCCtrl, ControlInfo((uint8_t)0, (uint8_t)0) },
+    //{ &SFOUTSS0Ctrl, ControlInfo((uint8_t)0, (uint8_t)0) },
+    //{ &SFOUTSS1Ctrl, ControlInfo((uint8_t)0, (uint8_t)0) }
+};
+
+} // namespace starfive::control
 
 int StarfiveSimpleCameraData::init() 
 {
@@ -81,7 +154,7 @@ int StarfiveSimpleCameraData::init()
     if (ret)
         return ret;
     disableISP = ipa_->isSensorISPEnabled();
-    
+
     csiSubDev_ = std::make_unique<V4L2Subdevice>(csiEntity);
     ret = csiSubDev_->open();
     if (ret)
@@ -91,6 +164,11 @@ int StarfiveSimpleCameraData::init()
         // Use the StarFive ISP pipeline.
         ispSubDev_ = std::make_unique<V4L2Subdevice>(media_->getEntityByName("stf_isp"));
         ret = ispSubDev_->open();
+        if (ret)
+            return ret;
+        videoOutputParams_ = V4L2VideoDevice::fromEntityName(media_, "output_params");
+
+        ret = videoOutputParams_->open();
         if (ret)
             return ret;
 
@@ -125,6 +203,12 @@ int StarfiveSimpleCameraData::init()
     properties_ = sensor_->properties();
 
     return 0;
+}
+
+void StarfiveSimpleCameraData::connectVideoSignal()
+{
+    StarfiveCameraDataBase::connectVideoSignal();
+    videoOutputParams_->bufferReady.connect(this, &StarfiveSimpleCameraData::regBufferReady);
 }
 
 void StarfiveSimpleCameraData::collectCompMbusCode()
@@ -184,11 +268,112 @@ void StarfiveSimpleCameraData::collectCompMbusCode()
     //    mbufCodeLink_.push_back(sinkCodes);
 
     mbufCodeLink_.push_back(sinkCodes);
-    std::vector<uint32_t> isp1Mbcode = {0x2004};
+    std::vector<uint32_t> isp1Mbcode = {ISP_YUV_OUTPUT_MBUSCODE};
     mbufCodeLink_.push_back(isp1Mbcode);
 
     //collectISPSizeRange();
     setSizeRange(Size(1920, 1080));
+}
+
+//void StarfiveSimpleCameraData::setSimpleIspControls(const ControlList &controls)
+//{
+//    //ControlList ctrlList = controls;
+//    for(const auto &ctrl: controls) {
+//        auto value = starfive::control::ispControls.find(ctrl.first);
+//        if(value != starfive::control::ispControls.end()) {
+//            // !!!!!!!!!!!!!!!!!!!!!!!!!
+//        }
+//    }
+//}
+
+void StarfiveSimpleCameraData::regBufferReady(FrameBuffer *buffer)
+{
+    freeOPBufferCookie_.push_back(buffer->cookie());
+}
+
+struct CtrlInBufInfo
+{
+    uint32_t positionFlag;
+    uint32_t offset;
+};
+
+static const CtrlInBufInfo CtrlInBufInfos[] =
+{
+    {JH7110_ISP_MODULE_WB_SETTING, offsetof(jh7110_isp_params_buffer, wb_setting)},
+    {JH7110_ISP_MODULE_CAR_SETTING, offsetof(jh7110_isp_params_buffer, car_setting)},
+    {JH7110_ISP_MODULE_CCM_SETTING, offsetof(jh7110_isp_params_buffer, ccm_setting)},
+    {JH7110_ISP_MODULE_CFA_SETTING, offsetof(jh7110_isp_params_buffer, cfa_setting)},
+    {JH7110_ISP_MODULE_CTC_SETTING, offsetof(jh7110_isp_params_buffer, ctc_setting)},
+    {JH7110_ISP_MODULE_DBC_SETTING, offsetof(jh7110_isp_params_buffer, dbc_setting)},
+    {JH7110_ISP_MODULE_DNYUV_SETTING, offsetof(jh7110_isp_params_buffer, dnyuv_setting)},
+    {JH7110_ISP_MODULE_GMARGB_SETTING, offsetof(jh7110_isp_params_buffer, gmargb_setting)},
+    {JH7110_ISP_MODULE_LCCF_SETTING, offsetof(jh7110_isp_params_buffer, lccf_setting)},
+    {JH7110_ISP_MODULE_OBC_SETTING, offsetof(jh7110_isp_params_buffer, obc_setting)},
+    {JH7110_ISP_MODULE_OECF_SETTING, offsetof(jh7110_isp_params_buffer, oecf_setting)},
+    {JH7110_ISP_MODULE_R2Y_SETTING, offsetof(jh7110_isp_params_buffer, r2y_setting)},
+    {JH7110_ISP_MODULE_SAT_SETTING, offsetof(jh7110_isp_params_buffer, sat_setting)},
+    {JH7110_ISP_MODULE_SHARP_SETTING, offsetof(jh7110_isp_params_buffer, sharp_setting)},
+    {JH7110_ISP_MODULE_YCRV_SETTING, offsetof(jh7110_isp_params_buffer, ycrv_setting)},
+    {JH7110_ISP_MODULE_SC_SETTING, offsetof(jh7110_isp_params_buffer, sc_setting)},
+};
+
+void StarfiveSimpleCameraData::processIPAControls(ControlList &ctrlList)
+{
+    if(freeOPBufferCookie_.empty())
+        LOG(STARFIVE, Error) << "No free output parameter buffer.";
+
+    uint32_t cookie = freeOPBufferCookie_.front();
+    auto bmIt = opBufferMaps_.find(cookie);
+	if (bmIt == opBufferMaps_.end()) {
+		LOG(STARFIVE, Error) << "Could not find stats buffer!";
+		return;
+	}
+    Span<uint8_t> mem = bmIt->second.planes()[0];
+    struct jh7110_isp_params_buffer *parBuf = (struct jh7110_isp_params_buffer *)mem.data();
+
+    parBuf->enable_setting = 0;
+    for(const auto &ctrl: ctrlList) {
+        auto control = starfive::control::ispControls.find(ctrl.first);
+        if(control != starfive::control::ispControls.end()) {
+            const ControlValue &value = ctrl.second;
+            const Span<const uint8_t> &spanData = value.get<Span<const uint8_t>>();
+            size_t parSize = spanData.size_bytes();
+            const uint8_t *data = spanData.data();
+            int index = ctrl.first - V4L2_CID_USER_JH7110_ISP_WB_SETTING;
+            const CtrlInBufInfo *cibInfo = &CtrlInBufInfos[index];
+
+            parBuf->enable_setting |= cibInfo->positionFlag;
+            memcpy(mem.data() + cibInfo->offset, data, parSize);
+        }
+    }
+
+    if(parBuf->enable_setting) {
+        freeOPBufferCookie_.pop_front();
+        opBuffers_[cookie]->_d()->metadata().planes()[0].bytesused = sizeof(struct jh7110_isp_params_buffer);
+        videoOutputParams_->queueBuffer(opBuffers_[cookie].get());
+    }
+}
+
+StarfivSimplePipelineAdapter::StarfivSimplePipelineAdapter(StarfiveCameraDataBase *data)
+		: StarfivPipelineAdapterBase(data)
+{
+    ControlInfoMap::Map ctrlMap = starfive::control::ipaControls;
+    const ControlInfoMap &driverControls = data_->ispSubDev_->controls();
+    ControlIdMap idMap = driverControls.idmap();
+
+    ctrlMap.insert(driverControls.begin(), driverControls.end());
+    idMap.insert(starfive::control::ispControls.begin(), starfive::control::ispControls.end());
+    localCtrlMap_ = ControlInfoMap(std::move(ctrlMap), idMap);
+}
+
+const ControlInfoMap &StarfivSimplePipelineAdapter::getISPControls()
+{
+    return localCtrlMap_;
+}
+
+PixelFormat StarfivSimplePipelineAdapter::getSCPixFormat([[maybe_unused]] Size size)
+{
+    return PixelFormat(V4L2_META_FMT_STF_ISP_PARAMS, (uint64_t)0);
 }
 
 int StarfivSimplePipelineAdapter::linkPipeline()
@@ -198,13 +383,19 @@ int StarfivSimplePipelineAdapter::linkPipeline()
 	int ret = 0;
 
 	if (!data->disableISP) {
-		MediaLink *ispLink = sfMediaDev->link("stf_isp", 1, "capture_raw", 0);
+		MediaLink *ispLink = sfMediaDev->link("cdns_csi2rx.19800000.csi-bridge", 1, "capture_raw", 0);
 		if (ispLink) {
 			ret = ispLink->setEnabled(false);
 			if (ret)
 				return ret;
 		}
-        ispLink = sfMediaDev->link("stf_isp", 1, "capture_yuv", 0);
+        ispLink = sfMediaDev->link("stf_isp", 1, "output_params", 0);
+		if (ispLink) {
+			ret = ispLink->setEnabled(true);
+			if (ret)
+				return ret;
+		}
+        ispLink = sfMediaDev->link("stf_isp", 2, "capture_yuv", 0);
 		if (ispLink) {
 			ret = ispLink->setEnabled(true);
 			if (ret)
@@ -223,7 +414,13 @@ int StarfivSimplePipelineAdapter::linkPipeline()
 			if (ret)
 				return ret;
 		}
-        ispLink = sfMediaDev->link("stf_isp", 1, "capture_raw", 0);
+        ispLink = sfMediaDev->link("stf_isp", 1, "output_params", 0);
+		if (ispLink) {
+			ret = ispLink->setEnabled(false);
+			if (ret)
+				return ret;
+		}
+        ispLink = sfMediaDev->link("cdns_csi2rx.19800000.csi-bridge", 1, "capture_raw", 0);
 		if (ispLink) {
 			ret = ispLink->setEnabled(true);
 			if (ret)
@@ -271,20 +468,39 @@ setupFormats_next:
     int ret = 0;
 
 	V4L2SubdeviceFormat curFormat = format;
-    ret = data->ispSubDev_->setFormat(1, &curFormat);
+    ret = data->ispSubDev_->setFormat(2, &curFormat);
     if (ret){
         return -EINVAL;
     }
 	if (!data->disableISP) {
-        V4L2Subdevice::Formats ispSDFormat = data->ispSubDev_->formats(2);
-        curFormat.mbus_code = ispSDFormat.begin()->first;
+        V4L2DeviceFormat oVideoFormat = {};
+        oVideoFormat.fourcc = libcamera::V4L2PixelFormat(V4L2_META_FMT_STF_ISP_PARAMS);
+        oVideoFormat.size = format.size;
+        ret = data->videoOutputParams_->setFormat(&oVideoFormat);
+        if (ret)
+            return ret;
+
+        curFormat.mbus_code = ISP_SC_OUTPUT_MBUSCODE;
         curFormat.size = format.size;
-        ret = data->ispSubDev_->setFormat(2, &curFormat);
+        ret = data->ispSubDev_->setFormat(1, &curFormat);
         if (ret)
             return -EINVAL;
 
+        curFormat.mbus_code = ISP_OUTPUT_PARAMS_MBUSCODE;
+        curFormat.size = format.size;
+        ret = data->ispSubDev_->setFormat(3, &curFormat);
+        if (ret)
+            return -EINVAL;
+
+        oVideoFormat.fourcc = libcamera::V4L2PixelFormat(V4L2_META_FMT_STF_ISP_STAT_3A);
+        oVideoFormat.size = format.size;
+        ret = data->scDev_->setFormat(&oVideoFormat);
+        if (ret)
+            return ret;
+        data->setSCFormat_ = true;
+
         const std::vector<uint32_t> &csiMbusCode = data->mbufCodeLink_.at(data->mbufCodeLink_.size() - 2);
-        ispSDFormat = data->ispSubDev_->formats(0);
+        //V4L2Subdevice::Formats ispSDFormat = data->ispSubDev_->formats(0);
         //for(const uint32_t &code : csiMbusCode) {
             //std::vector<SizeRange> &srs = ispSDFormat.at(code);
             //for(auto &sr : srs) {
@@ -305,9 +521,9 @@ setupFormats_next:
             //}
         //}
 	} else {
-        V4L2Subdevice::Formats ispSDFormat = data->ispSubDev_->formats(1);
+        V4L2Subdevice::Formats ispVideoFormat = data->ispSubDev_->formats(1);
         for(const uint32_t &code : mbusCode) {
-            std::vector<SizeRange> &srs = ispSDFormat.at(code);
+            std::vector<SizeRange> &srs = ispVideoFormat.at(code);
             for(auto &sr : srs) {
                 if(sr.contains(format.size)) {
                     curFormat.mbus_code = code;
@@ -327,5 +543,31 @@ setupFormats_next:
 	return 0;
 }
 
+int StarfivSimplePipelineAdapter::start()
+{
+    StarfiveSimpleCameraData *data = dynamic_cast<StarfiveSimpleCameraData *>(data_);
+    int ret = 0;
+
+    if (!data->disableISP) {
+        ret = data->videoOutputParams_->allocateBuffers(STREAM_BUFFER_COUNT, &data->opBuffers_);
+		if (ret < 0)
+			return ret;
+
+        data->freeOPBufferCookie_.clear();
+		uint32_t bufID = 0;
+		for (auto &buf : data->opBuffers_) {
+			buf->setCookie(bufID);
+			data->opBufferMaps_.emplace(bufID,
+				 MappedFrameBuffer(buf.get(), MappedFrameBuffer::MapFlag::ReadWrite));
+            data->freeOPBufferCookie_.push_back(bufID++);
+		}
+
+		ret = data->videoOutputParams_->streamOn();
+		if (ret < 0)
+			return ret;
+    }
+
+    return 0;
+}
 
 } // namespace libcamera

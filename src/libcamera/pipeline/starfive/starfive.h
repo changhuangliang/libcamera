@@ -95,7 +95,8 @@ public:
     {
         ControlList ctrlList = controls;
 
-	    ispSubDev_->setControls(&ctrlList);
+	    //ispSubDev_->setControls(&ctrlList);
+        processIPAControls(ctrlList);
     }
 
 	bool findMatchVideoFormat(const PixelFormat &pixelFormat, const Size &size, V4L2PixelFormat &format)
@@ -193,6 +194,11 @@ protected:
 
 	virtual void collectCompMbusCode() = 0;
 
+    virtual void processIPAControls(ControlList &ctrlList)
+    {
+        ispSubDev_->setControls(&ctrlList);
+    }
+
 	void collectISPSizeRange()
     {
         uint64_t maxArea = 0;
@@ -233,6 +239,11 @@ public:
 
 	virtual ~StarfivPipelineAdapterBase(){}
 
+    virtual const ControlInfoMap &getISPControls()
+    {
+        return data_->ispSubDev_->controls();
+    }
+
 	virtual uint32_t mbusCodeTrans(uint32_t code) {return code;};
 	virtual int setRawSubDevFormat([[maybe_unused]] V4L2SubdeviceFormat &sensorFormat) {return 0;};
 	virtual int setSSOutFormat([[maybe_unused]] V4L2DeviceFormat &format)
@@ -251,6 +262,8 @@ public:
 	virtual int linkPipeline() = 0;
 	virtual int setupFormats(const V4L2DeviceFormat videoFormat) = 0;
 
+    virtual int start() { return 0; };
+
 protected:
 	StarfiveCameraDataBase *const data_;
 
@@ -266,29 +279,62 @@ public:
 	{
 	}
 
-    ~StarfiveSimpleCameraData() {};
+    ~StarfiveSimpleCameraData() 
+    {
+        opBufferMaps_.clear();
+    }
 
     int init() override;
 
+public:
+    std::unique_ptr<V4L2VideoDevice> videoOutputParams_;
+    std::vector<std::unique_ptr<FrameBuffer>> opBuffers_;
+    std::map<uint32_t, MappedFrameBuffer> opBufferMaps_;
+    std::list<uint32_t> freeOPBufferCookie_;
+
 protected:
+    //void setSimpleIspControls(const ControlList &controls);
+
+    //virtual void connectIPASignal() override
+    //{
+    //    StarfiveCameraDataBase::connectIPASignal();
+    //    ipa_->setIspControls.disconnect();
+    //    ipa_->setIspControls.connect(this, &StarfiveSimpleCameraData::setSimpleIspControls);
+    //}
+
+    void connectVideoSignal() override;
 
     void collectCompMbusCode() override;
+    void processIPAControls(ControlList &ctrlList) override;
+
 	void setSizeRange(Size sz) {
 		ispSizeRange_.push_back(sz);
 		maxISPSize_ = sz;
 	}
+
+    void regBufferReady(FrameBuffer *buffer);
+
+private:
+    std::vector<std::unique_ptr<FrameBuffer>> registerBuffers_;
+    std::unordered_map<uint32_t, MappedFrameBuffer> registerBufferMaps_;
+    std::list<uint32_t> freeRegBufID_;
 };
 
 class StarfivSimplePipelineAdapter : public StarfivPipelineAdapterBase
 {
 public:
-	StarfivSimplePipelineAdapter(StarfiveCameraDataBase *data)
-		: StarfivPipelineAdapterBase(data)
-	{
-	}
+    StarfivSimplePipelineAdapter(StarfiveCameraDataBase *data);
+
+    const ControlInfoMap &getISPControls() override;
+    PixelFormat getSCPixFormat([[maybe_unused]] Size size) override;
 
 	int linkPipeline() override;
 	int setupFormats(const V4L2DeviceFormat videoFormat) override;
+
+    int start() override;
+
+private:
+    ControlInfoMap localCtrlMap_;
 };
 
 

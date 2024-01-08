@@ -884,7 +884,9 @@ int PipelineHandlerStarfive::configure(Camera *camera, CameraConfiguration *c)
 		{(uint16_t)sensorInfo.outputSize.width, (uint16_t)sensorInfo.outputSize.height},
 		{(uint16_t)sensorInfo.outputSize.width, (uint16_t)sensorInfo.outputSize.height}
 	};
-	ret = data->ipa_->configure(data->ispSubDev_->controls(), data->sensor_->controls(),
+	//ret = data->ipa_->configure(data->ispSubDev_->controls(), data->sensor_->controls(),
+	//	sensorInfo, outSSParams);
+	ret = data->ipa_->configure(adapter_->getISPControls(), data->sensor_->controls(),
 		sensorInfo, outSSParams);
 	if (ret)
 		return ret;
@@ -959,6 +961,10 @@ int PipelineHandlerStarfive::start(Camera *camera, const ControlList *controls)
 		if (ret < 0)
 			goto error_start_4;
 	}
+
+	ret = adapter_->start();
+	if (ret < 0)
+		goto error_start_4;
 
 	ret = data->ipa_->start(controls ? *controls : ControlList{ controls::controls });
 	if (ret < 0)
