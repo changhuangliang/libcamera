@@ -981,6 +981,7 @@ error_start_4:
 		data->scDev_->streamOff();
 		data->scDev_->releaseBuffers();
 		data->scBuffers_.clear();
+		data->stopOhterDevice();
 	}
 error_start_3:
 	data->raw_->streamOff();
@@ -1009,6 +1010,8 @@ void PipelineHandlerStarfive::stopDevice(Camera *camera)
 		data->scDev_->streamOff();
 		data->scDev_->releaseBuffers();
 		data->scBuffers_.clear();
+
+		data->stopOhterDevice();
 	}
 
 	if (data->haveRaw_) {

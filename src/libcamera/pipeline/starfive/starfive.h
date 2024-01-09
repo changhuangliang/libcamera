@@ -146,6 +146,8 @@ public:
         return false;
     }
 
+    virtual void stopOhterDevice() {};
+
 public:
     bool disableISP;
 
@@ -294,6 +296,15 @@ public:
     }
 
     int init() override;
+
+    void stopOhterDevice() override
+    {
+        videoOutputParams_->streamOff();
+        videoOutputParams_->releaseBuffers();
+        opBufferMaps_.clear();
+        opBuffers_.clear();
+        freeOPBufferCookie_.clear();
+    }
 
 public:
     std::unique_ptr<V4L2VideoDevice> videoOutputParams_;
