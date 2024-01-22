@@ -47,6 +47,9 @@ public:
 	virtual void enable(enum ModuleType mt, bool en) = 0;
 
 	virtual void getControl(enum ModuleType mt, ControlList &ctrlList) = 0;
+ 
+	virtual void setModuleParams(enum ModuleType mt, const ControlValue &ctrlValue) = 0;
+	virtual void getModuleParams(enum ModuleType mt, const ControlValue &ctrlValue) = 0;
 
 };
 

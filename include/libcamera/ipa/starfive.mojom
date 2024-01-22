@@ -38,4 +38,5 @@ interface IPAStarfiveInterface {
 interface IPAStarfiveEventInterface {
 	setDelayedControls(libcamera.ControlList controls);
 	setIspControls(libcamera.ControlList controls);
+	completeGetInfo(uint32 reqCookie, bool result);
 };

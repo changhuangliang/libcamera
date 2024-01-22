@@ -101,6 +101,20 @@ public:
         processIPAControls(ctrlList);
     }
 
+    void completeGetInfo(const uint32_t reqCookie, const bool result)
+    {
+        PipelineHandler *pipe = Camera::Private::pipe();
+        Request *request = getInfoRequest_[reqCookie];
+        FrameBuffer *emptyBuffer = request->buffers().begin()->second;
+        uint64_t bufCookie = emptyBuffer->cookie() & 0xffffffffffffff00;
+
+        bufCookie |= result ? 1 : 0;
+        emptyBuffer->setCookie(bufCookie);
+        pipe->completeBuffer(request, request->buffers().begin()->second);
+    		pipe->completeRequest(request);
+        getInfoRequest_.erase(reqCookie);
+    }
+
 	bool findMatchVideoFormat(const PixelFormat &pixelFormat, const Size &size, V4L2PixelFormat &format)
     {
         if (!mbufCodeLink_.size())
@@ -176,6 +190,8 @@ public:
 
 	bool running_ = false;
 
+    std::unordered_map<uint32_t, Request*> getInfoRequest_;
+
 protected:
     virtual void connectSCSignal()
     {
@@ -194,6 +210,7 @@ protected:
     {
         ipa_->setDelayedControls.connect(this, &StarfiveCameraDataBase::setDelayedControls);
         ipa_->setIspControls.connect(this, &StarfiveCameraDataBase::setIspControls);
+        ipa_->completeGetInfo.connect(this, &StarfiveCameraDataBase::completeGetInfo);
     }
 
 	virtual void collectCompMbusCode() = 0;
