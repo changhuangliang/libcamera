@@ -2,6 +2,7 @@
 
 algorithms_source = files([
     'open_algo.cpp',
+    'starfive_controls.cpp',
 ])
 
 #open_algorithms_lib = shared_module('starfive_isp_algorithms',

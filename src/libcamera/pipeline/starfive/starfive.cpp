@@ -1025,6 +1025,18 @@ int PipelineHandlerStarfive::queueRequestDevice(Camera *camera, Request *request
 	StarfiveCameraData *data = cameraData(camera);
 	int ret = 0;
 
+	if(request->cookie()) {
+		if(!request->controls().empty()) {
+			data->getInfoRequest_[(uint32_t)request->cookie()] = request;
+			data->ipa_->queueRequest(request->controls());
+		} else {
+			//data->ipa_->queueRequest(request->controls());
+			completeBuffer(request, request->buffers().begin()->second);
+			completeRequest(request);
+		}
+		return 0;
+	}
+
 	data->ipa_->queueRequest(request->controls());
 
 	for (auto it : request->buffers()) {

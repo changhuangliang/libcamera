@@ -38,6 +38,8 @@
 #include "sensor_helper.h"
 #include "linux/jh7110-isp.h"
 
+#include "openAlgo/starfive_controls.h"
+
 namespace libcamera {
 
 LOG_DEFINE_CATEGORY(IPASTARFIVE)
@@ -123,9 +125,14 @@ void IPASTARFIVE::calcSCCropInfo(Size imageSize, struct SCCropInfo &info)
 	uint32_t subWidth = (imageSize.width / (xDecFactor + 1)) & 0xfffe;
 	uint32_t subHeight = (imageSize.height / (yDecFactor + 1)) & 0xfffe;
 
+	info.subWidth = subWidth;
+	info.subHeight = subHeight;
+
 	subWidth = (subWidth / 16) & 0xfffe;
 	subHeight = (subHeight / 16) & 0xfffe;
 
+	info.imgWidth = imageSize.width;
+	info.imgHeight = imageSize.height;
 	info.hStart = ((imageSize.width - subWidth * 16 * (xDecFactor + 1)) >> 1) & 0xfffe;
 	info.vStart = ((imageSize.height - subHeight * 16 * (yDecFactor + 1)) >> 1) & 0xfffe;
 	info.swWidth = subWidth - 1;
@@ -143,7 +150,8 @@ void IPASTARFIVE::initParamters(const IPACameraSensorInfo & sensorInfo, const Co
 	uint32_t lineLength = sensorInfo.outputSize.width + hblank;
 
 	const ControlInfo &v4l2Exposure = sensorControls.find(V4L2_CID_EXPOSURE)->second;
-	uint32_t expoRange[2] = { (uint32_t)v4l2Exposure.min().get<int32_t>(), (uint32_t)v4l2Exposure.max().get<int32_t>() };
+	uint32_t expoRange[2] = { (uint32_t)v4l2Exposure.min().get<int32_t>(), 
+		(uint32_t)v4l2Exposure.max().get<int32_t>() };
 
 	const ControlInfo &v4l2AnalGain = sensorControls.find(V4L2_CID_ANALOGUE_GAIN)->second;
 	double analGainRange[2] = { sensorHelper_->gain(v4l2AnalGain.min().get<int32_t>()), 
@@ -153,7 +161,8 @@ void IPASTARFIVE::initParamters(const IPACameraSensorInfo & sensorInfo, const Co
 
 	calcSCCropInfo(sensorInfo.outputSize, scCropInfo);
 
-	impleAlgorithm_void("star5.ae", init(&scCropInfo, lineLength * 1000000.0 / sensorInfo.pixelRate, expoRange, analGainRange));
+	impleAlgorithm_void("star5.ae", init(&scCropInfo, lineLength * 1000000.0 / sensorInfo.pixelRate, 
+		expoRange, analGainRange));
 	impleAlgorithm_void("star5.sc", init(&scCropInfo));
 }
 
@@ -236,16 +245,20 @@ void IPASTARFIVE::processRequest(const ControlList &controls)
 		return;
 
 	ControlList sensorCtrls(sensorCtrls_);
+	ControlList ctlControls(ispCtrlInfoMap_);
 
-	if (controls.contains(controls::AE_ENABLE))
-		algoAgc->enable(Algorithm::modty_ctl, controls.get(controls::AE_ENABLE).get<bool>());
-	if (controls.contains(controls::AWB_ENABLE))
-		algoAwb->enable(Algorithm::modty_ctl, controls.get(controls::AWB_ENABLE).get<bool>());
+	//if (controls.contains(controls::AE_ENABLE))
+	//	algoAgc->enable(Algorithm::modty_ctl, controls.get(controls::AE_ENABLE).get<bool>());
+	//if (controls.contains(controls::AWB_ENABLE))
+	//	algoAwb->enable(Algorithm::modty_ctl, controls.get(controls::AWB_ENABLE).get<bool>());
 
 	for (auto const &ctrl : controls) {
 		switch (ctrl.first) {
 		case controls::AE_ENABLE:
+			algoAgc->enable(Algorithm::modty_ctl, ctrl.second.get<bool>());
+			break;
 		case controls::AWB_ENABLE:
+			algoAwb->enable(Algorithm::modty_ctl, ctrl.second.get<bool>());
 			break;
 		case controls::EXPOSURE_TIME:
 			if (!algoAgc->isEnabled(Algorithm::modty_ctl)) {
@@ -262,13 +275,51 @@ void IPASTARFIVE::processRequest(const ControlList &controls)
 			if (!algoAgc->isEnabled(Algorithm::modty_ctl))
 				setEV(algoAgc, pow(2.0, ctrl.second.get<float>()));
 			break;
-		default:
+		default: {
+			bool imple = false;
+			struct GetInfoInfo giInfo;
+			getGIInfoNameByControl(ctrl.first, ctrl.second, giInfo);
+			if(giInfo.moduleName != "") {
+				Algorithm *algo = getISPModule(giInfo.moduleName);
+				if(algo) {
+					setISPModuleParams(algo, ctrl.first, giInfo.controlID, ctrl.second);
+					imple = true;
+				}
+
+				if(hardwareInited_) {
+					if (libcamera::starfive::control::AE_CTRL_INFOR == ctrl.first) {
+						// Set sensor exposure and gain.
+						if(!algoAgc->isEnabled(Algorithm::modty_ctl)) {
+							uint32_t exposureLines = 0;
+							double sensorGain = 0.0;
+
+							getCurrentEV(algoAgc, exposureLines, sensorGain, ae_sevph_all);
+							if (exposureLines)
+								sensorCtrls.set(V4L2_CID_EXPOSURE, (int32_t)exposureLines);
+							if (sensorGain > 0.0)
+								sensorCtrls.set(V4L2_CID_ANALOGUE_GAIN, (int32_t)sensorHelper_->gainCode(sensorGain));
+						}
+					} else if(libcamera::starfive::control::GET_INFORMATION != ctrl.first) {
+						getISPModule(giInfo.moduleName)->getControl(Algorithm::ModuleType::modty_ctl, ctlControls);
+					} else {}
+				}
+			}
+
+			if(libcamera::starfive::control::GET_INFORMATION == ctrl.first) {
+				const uint8_t *data = ctrl.second.get<Span<const uint8_t>>().data();
+				const libcamera::starfive::control::GetModuleInformation *info = 
+					(const libcamera::starfive::control::GetModuleInformation *)data;
+				completeGetInfo.emit(info->reqCookie, imple);
+			}
+			}
 			break;
 		}
 	}
 
 	if (sensorCtrls.size())
 		setDelayedControls.emit(sensorCtrls);
+	if (ctlControls.size())
+		setIspControls.emit(ctlControls);
 }
 
 void IPASTARFIVE::setSSParamsControl(ControlList &ctrlList)

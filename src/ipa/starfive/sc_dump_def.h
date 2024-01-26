@@ -20,7 +20,11 @@ namespace ipa::starfive {
 
 #define AWB_WEIGHTING_SUM_W_OFFSET (0x0200)
 
+#pragma pack(push, 1)
 struct SCCropInfo {
+	uint16_t imgWidth;
+	uint16_t imgHeight;
+			
 	uint16_t hStart;
 	uint16_t vStart;
 	uint8_t swWidth;
@@ -29,8 +33,11 @@ struct SCCropInfo {
 	uint8_t hKeep;
 	uint8_t vPeriod;
 	uint8_t vKeep;
-};
 
+	uint16_t subWidth;
+	uint16_t subHeight;
+};
+#pragma pack(pop)
 } // namespace ipa::starfive
 
 } // namespace libcamera
