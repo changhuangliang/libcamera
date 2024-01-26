@@ -241,14 +241,14 @@ protected:
     uint32_t scSequence_;
 };
 
-class StarfivPipelineAdapterBase
+class StarfivePipelineAdapterBase
 {
 public:
-	StarfivPipelineAdapterBase(StarfiveCameraDataBase *data) : data_(data)
+	StarfivePipelineAdapterBase(StarfiveCameraDataBase *data) : data_(data)
 	{
 	}
 
-	virtual ~StarfivPipelineAdapterBase(){}
+	virtual ~StarfivePipelineAdapterBase(){}
 
     virtual const ControlInfoMap &getISPControls()
     {
@@ -279,7 +279,7 @@ protected:
 	StarfiveCameraDataBase *const data_;
 
 private:
-	StarfivPipelineAdapterBase() = default;
+	StarfivePipelineAdapterBase() = default;
 };
 
 class StarfiveSimpleCameraData : public StarfiveCameraDataBase
@@ -333,10 +333,10 @@ private:
     std::list<uint32_t> freeRegBufID_;
 };
 
-class StarfivSimplePipelineAdapter : public StarfivPipelineAdapterBase
+class StarfiveSimplePipelineAdapter : public StarfivePipelineAdapterBase
 {
 public:
-    StarfivSimplePipelineAdapter(StarfiveCameraDataBase *data);
+    StarfiveSimplePipelineAdapter(StarfiveCameraDataBase *data);
 
     const ControlInfoMap &getISPControls() override;
     PixelFormat getSCPixFormat([[maybe_unused]] Size size) override;

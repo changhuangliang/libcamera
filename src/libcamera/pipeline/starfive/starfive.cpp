@@ -406,11 +406,11 @@ CameraConfiguration::Status StarfiveCameraConfiguration::validate()
 	return status;
 }
 
-class StarfivPipelineAdapter : public StarfivPipelineAdapterBase
+class StarfivePipelineAdapter : public StarfivePipelineAdapterBase
 {
 public:
-	StarfivPipelineAdapter(StarfiveCameraDataBase *data)
-		: StarfivPipelineAdapterBase(data)
+	StarfivePipelineAdapter(StarfiveCameraDataBase *data)
+		: StarfivePipelineAdapterBase(data)
 	{
 	}
 
@@ -463,7 +463,7 @@ public:
 	int setupFormats(const V4L2DeviceFormat videoFormat) override;
 };
 
-int StarfivPipelineAdapter::linkPipeline()
+int StarfivePipelineAdapter::linkPipeline()
 {
 	StarfiveCameraData *data = dynamic_cast<StarfiveCameraData *>(data_);
 	MediaDevice *sfMediaDev = data->media_;
@@ -550,7 +550,7 @@ int StarfivPipelineAdapter::linkPipeline()
 	return 0;
 }
 
-int StarfivPipelineAdapter::setupFormats(const V4L2DeviceFormat videoFormat)
+int StarfivePipelineAdapter::setupFormats(const V4L2DeviceFormat videoFormat)
 {
 	StarfiveCameraData *data = dynamic_cast<StarfiveCameraData *>(data_);
 	if (!data->mbufCodeLink_.size())
@@ -658,7 +658,7 @@ private:
 	int freeBuffers(Camera *camera);
 
 private:
-	std::unique_ptr<StarfivPipelineAdapterBase> adapter_;
+	std::unique_ptr<StarfivePipelineAdapterBase> adapter_;
 	Starfive::PipelineType pplType_;
 };
 
@@ -1056,8 +1056,8 @@ int PipelineHandlerStarfive::registerCameras(MediaDevice *sfMediaDev)
 		return ret;
 
 	adapter_ = Starfive::PipelineType::pplt_normal == pplType_ ? 
-		std::unique_ptr<StarfivPipelineAdapterBase>(new StarfivPipelineAdapter(data.get())) :
-		std::unique_ptr<StarfivPipelineAdapterBase>(new StarfivSimplePipelineAdapter(data.get()));
+		std::unique_ptr<StarfivePipelineAdapterBase>(new StarfivePipelineAdapter(data.get())) :
+		std::unique_ptr<StarfivePipelineAdapterBase>(new StarfiveSimplePipelineAdapter(data.get()));
 
 	ret = linkPipeline();
 	if (ret)

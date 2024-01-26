@@ -349,8 +349,8 @@ void StarfiveSimpleCameraData::processIPAControls(ControlList &ctrlList)
     }
 }
 
-StarfivSimplePipelineAdapter::StarfivSimplePipelineAdapter(StarfiveCameraDataBase *data)
-		: StarfivPipelineAdapterBase(data)
+StarfiveSimplePipelineAdapter::StarfiveSimplePipelineAdapter(StarfiveCameraDataBase *data)
+		: StarfivePipelineAdapterBase(data)
 {
     ControlInfoMap::Map ctrlMap = starfive::control::ipaControls;
     const ControlInfoMap &driverControls = data_->ispSubDev_->controls();
@@ -361,17 +361,17 @@ StarfivSimplePipelineAdapter::StarfivSimplePipelineAdapter(StarfiveCameraDataBas
     localCtrlMap_ = ControlInfoMap(std::move(ctrlMap), idMap);
 }
 
-const ControlInfoMap &StarfivSimplePipelineAdapter::getISPControls()
+const ControlInfoMap &StarfiveSimplePipelineAdapter::getISPControls()
 {
     return localCtrlMap_;
 }
 
-PixelFormat StarfivSimplePipelineAdapter::getSCPixFormat([[maybe_unused]] Size size)
+PixelFormat StarfiveSimplePipelineAdapter::getSCPixFormat([[maybe_unused]] Size size)
 {
     return PixelFormat(V4L2_META_FMT_STF_ISP_PARAMS, (uint64_t)0);
 }
 
-int StarfivSimplePipelineAdapter::linkPipeline()
+int StarfiveSimplePipelineAdapter::linkPipeline()
 {
     StarfiveSimpleCameraData *data = dynamic_cast<StarfiveSimpleCameraData *>(data_);
 	MediaDevice *sfMediaDev = data->media_;
@@ -426,7 +426,7 @@ int StarfivSimplePipelineAdapter::linkPipeline()
 	return 0;
 }
 
-int StarfivSimplePipelineAdapter::setupFormats(const V4L2DeviceFormat videoFormat)
+int StarfiveSimplePipelineAdapter::setupFormats(const V4L2DeviceFormat videoFormat)
 {
     StarfiveSimpleCameraData *data = dynamic_cast<StarfiveSimpleCameraData *>(data_);
 	if (!data->mbufCodeLink_.size())
@@ -538,7 +538,7 @@ setupFormats_next:
 	return 0;
 }
 
-int StarfivSimplePipelineAdapter::start()
+int StarfiveSimplePipelineAdapter::start()
 {
     StarfiveSimpleCameraData *data = dynamic_cast<StarfiveSimpleCameraData *>(data_);
     int ret = 0;
