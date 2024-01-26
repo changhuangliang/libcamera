@@ -15,44 +15,22 @@
 
 #include <linux/v4l2-controls.h>
 
-#define V4L2_CID_USER_JH7110_ISP_BASE				(V4L2_CID_USER_BASE + 0x1170)
-
-#define V4L2_CID_USER_JH7110_ISP_WB_SETTING	\
-				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0001)
-#define V4L2_CID_USER_JH7110_ISP_CAR_SETTING	\
-				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0002)
-#define V4L2_CID_USER_JH7110_ISP_CCM_SETTING	\
-				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0003)
-#define V4L2_CID_USER_JH7110_ISP_CFA_SETTING		\
-				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0004)
-#define V4L2_CID_USER_JH7110_ISP_CTC_SETTING		\
-				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0005)
-#define V4L2_CID_USER_JH7110_ISP_DBC_SETTING	\
-				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0006)
-#define V4L2_CID_USER_JH7110_ISP_DNYUV_SETTING	\
-				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0007)
-#define V4L2_CID_USER_JH7110_ISP_GMARGB_SETTING		\
-				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0008)
-#define V4L2_CID_USER_JH7110_ISP_LCCF_SETTING \
-				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0009)
-#define V4L2_CID_USER_JH7110_ISP_OBC_SETTING	\
-				(V4L2_CID_USER_JH7110_ISP_BASE + 0x000a)
-#define V4L2_CID_USER_JH7110_ISP_OECF_SETTING	\
-				(V4L2_CID_USER_JH7110_ISP_BASE + 0x000b)
-#define V4L2_CID_USER_JH7110_ISP_R2Y_SETTING	\
-				(V4L2_CID_USER_JH7110_ISP_BASE + 0x000c)
-#define V4L2_CID_USER_JH7110_ISP_SAT_SETTING		\
-				(V4L2_CID_USER_JH7110_ISP_BASE + 0x000d)
-#define V4L2_CID_USER_JH7110_ISP_SHRP_SETTING		\
-				(V4L2_CID_USER_JH7110_ISP_BASE + 0x000e)
-#define V4L2_CID_USER_JH7110_ISP_YCRV_SETTING	\
-				(V4L2_CID_USER_JH7110_ISP_BASE + 0x000f)
-#define V4L2_CID_USER_JH7110_ISP_STAT_SETTING \
-				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0010)
-#define V4L2_CID_USER_JH7110_ISP_OUTSS0_SETTING \
-				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0011)
-#define V4L2_CID_USER_JH7110_ISP_OUTSS1_SETTING \
-				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0012)
+#define JH7110_ISP_MODULE_WB_SETTING			(1U << 0)
+#define JH7110_ISP_MODULE_CAR_SETTING			(1U << 1)
+#define JH7110_ISP_MODULE_CCM_SETTING			(1U << 2)
+#define JH7110_ISP_MODULE_CFA_SETTING			(1U << 3)
+#define JH7110_ISP_MODULE_CTC_SETTING			(1U << 4)
+#define JH7110_ISP_MODULE_DBC_SETTING			(1U << 5)
+#define JH7110_ISP_MODULE_DNYUV_SETTING			(1U << 6)
+#define JH7110_ISP_MODULE_GMARGB_SETTING		(1U << 7)
+#define JH7110_ISP_MODULE_LCCF_SETTING			(1U << 8)
+#define JH7110_ISP_MODULE_OBC_SETTING			(1U << 9)
+#define JH7110_ISP_MODULE_OECF_SETTING			(1U << 10)
+#define JH7110_ISP_MODULE_R2Y_SETTING			(1U << 11)
+#define JH7110_ISP_MODULE_SAT_SETTING			(1U << 12)
+#define JH7110_ISP_MODULE_SHARP_SETTING			(1U << 13)
+#define JH7110_ISP_MODULE_YCRV_SETTING			(1U << 14)
+#define JH7110_ISP_MODULE_SC_SETTING			(1U << 15)
 
 struct jh7110_isp_wb_gain {
 	__u16 gain_r;
@@ -153,30 +131,30 @@ struct jh7110_isp_lccf_setting {
 	struct jh7110_isp_lccf_curve_param b_param;
 };
 
-struct jh7110_isp_blacklevel_win_size {
+struct jh7110_isp_obc_win_size {
 	__u32 width;
 	__u32 height;
 };
 
-struct jh7110_isp_blacklevel_gain {
+struct jh7110_isp_obc_gain {
 	__u8 tl_gain;
 	__u8 tr_gain;
 	__u8 bl_gain;
 	__u8 br_gain;
 };
 
-struct jh7110_isp_blacklevel_offset {
+struct jh7110_isp_obc_offset {
 	__u8 tl_offset;
 	__u8 tr_offset;
 	__u8 bl_offset;
 	__u8 br_offset;
 };
 
-struct jh7110_isp_blacklevel_setting {
+struct jh7110_isp_obc_setting {
 	__u32 enabled;
-	struct jh7110_isp_blacklevel_win_size win_size;
-	struct jh7110_isp_blacklevel_gain gain[4];
-	struct jh7110_isp_blacklevel_offset offset[4];
+	struct jh7110_isp_obc_win_size win_size;
+	struct jh7110_isp_obc_gain gain[4];
+	struct jh7110_isp_obc_offset offset[4];
 };
 
 struct jh7110_isp_oecf_point {
@@ -307,7 +285,6 @@ struct jh7110_isp_sc_awb_ws {
 	__u8 awb_ws_bu;
 };
 
-
 struct jh7110_isp_sc_awb_point {
 	__u16 intensity;
 	__u8 weight;
@@ -329,14 +306,30 @@ struct jh7110_isp_sc_setting {
 	struct jh7110_isp_sc_awb_config awb_config;
 };
 
-struct jh7110_isp_outss_setting {
-	__u8 which;
-	__u16 stride;	// Output Image Stride Register, 8-byte(64bit) granularity.
-	__u8 hsm;		// horizontal scale mode
-	__u32 hsf;		// horizontal scale factor (time 4096)
-	__u8 vsm;		// vertical scale mode
-	__u32 vsf;		// vertical scale factor (time 4096)
+struct jh7110_isp_params_buffer {
+	__u32 enable_setting;
+	struct jh7110_isp_wb_setting wb_setting;
+	struct jh7110_isp_car_setting car_setting;
+	struct jh7110_isp_ccm_setting ccm_setting;
+	struct jh7110_isp_cfa_setting cfa_setting;
+	struct jh7110_isp_ctc_setting ctc_setting;
+	struct jh7110_isp_dbc_setting dbc_setting;
+	struct jh7110_isp_dnyuv_setting dnyuv_setting;
+	struct jh7110_isp_gmargb_setting gmargb_setting;
+	struct jh7110_isp_lccf_setting lccf_setting;
+	struct jh7110_isp_obc_setting obc_setting;
+	struct jh7110_isp_oecf_setting oecf_setting;
+	struct jh7110_isp_r2y_setting r2y_setting;
+	struct jh7110_isp_sat_setting sat_setting;
+	struct jh7110_isp_sharp_setting sharp_setting;
+	struct jh7110_isp_ycrv_setting ycrv_setting;
+	struct jh7110_isp_sc_setting sc_setting;
 };
+
+#define JH7110_ISP_SC_FALG_INVALID		0x0
+#define JH7110_ISP_SC_FALG_VALID		0xffff
+
+#pragma pack(1)
 
 struct jh7110_isp_sc_buffer {
 	__u32 y_histogram[64];
@@ -346,6 +339,63 @@ struct jh7110_isp_sc_buffer {
 	__u32 ae_hist_y[128];
 	__u32 reserv2[511];
 	__u16 flag;
+};
+
+#pragma pack()
+
+#include <linux/v4l2-controls.h>
+
+#define V4L2_CID_USER_JH7110_ISP_BASE				(V4L2_CID_USER_BASE + 0x1170)
+
+#define V4L2_CID_USER_JH7110_ISP_WB_SETTING	\
+				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0001)
+#define V4L2_CID_USER_JH7110_ISP_CAR_SETTING	\
+				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0002)
+#define V4L2_CID_USER_JH7110_ISP_CCM_SETTING	\
+				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0003)
+#define V4L2_CID_USER_JH7110_ISP_CFA_SETTING		\
+				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0004)
+#define V4L2_CID_USER_JH7110_ISP_CTC_SETTING		\
+				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0005)
+#define V4L2_CID_USER_JH7110_ISP_DBC_SETTING	\
+				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0006)
+#define V4L2_CID_USER_JH7110_ISP_DNYUV_SETTING	\
+				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0007)
+#define V4L2_CID_USER_JH7110_ISP_GMARGB_SETTING		\
+				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0008)
+#define V4L2_CID_USER_JH7110_ISP_LCCF_SETTING \
+				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0009)
+#define V4L2_CID_USER_JH7110_ISP_OBC_SETTING	\
+				(V4L2_CID_USER_JH7110_ISP_BASE + 0x000a)
+#define V4L2_CID_USER_JH7110_ISP_OECF_SETTING	\
+				(V4L2_CID_USER_JH7110_ISP_BASE + 0x000b)
+#define V4L2_CID_USER_JH7110_ISP_R2Y_SETTING	\
+				(V4L2_CID_USER_JH7110_ISP_BASE + 0x000c)
+#define V4L2_CID_USER_JH7110_ISP_SAT_SETTING		\
+				(V4L2_CID_USER_JH7110_ISP_BASE + 0x000d)
+#define V4L2_CID_USER_JH7110_ISP_SHRP_SETTING		\
+				(V4L2_CID_USER_JH7110_ISP_BASE + 0x000e)
+#define V4L2_CID_USER_JH7110_ISP_YCRV_SETTING	\
+				(V4L2_CID_USER_JH7110_ISP_BASE + 0x000f)
+#define V4L2_CID_USER_JH7110_ISP_STAT_SETTING \
+				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0010)
+#define V4L2_CID_USER_JH7110_ISP_OUTSS0_SETTING \
+				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0011)
+#define V4L2_CID_USER_JH7110_ISP_OUTSS1_SETTING \
+				(V4L2_CID_USER_JH7110_ISP_BASE + 0x0012)
+				
+typedef struct jh7110_isp_obc_win_size			jh7110_isp_blacklevel_win_size;
+typedef struct jh7110_isp_obc_gain				jh7110_isp_blacklevel_gain;
+typedef struct jh7110_isp_obc_offset			jh7110_isp_blacklevel_offset;
+typedef struct jh7110_isp_obc_setting			jh7110_isp_blacklevel_setting;
+
+struct jh7110_isp_outss_setting {
+	__u8 which;
+	__u16 stride;	// Output Image Stride Register, 8-byte(64bit) granularity.
+	__u8 hsm;		// horizontal scale mode
+	__u32 hsf;		// horizontal scale factor (time 4096)
+	__u8 vsm;		// vertical scale mode
+	__u32 vsf;		// vertical scale factor (time 4096)
 };
 
 #endif
