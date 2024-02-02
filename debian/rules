@@ -22,7 +22,7 @@ override_dh_auto_build:
 	dh_auto_build
 ifeq ($(DEB_HOST_ARCH),$(findstring $(DEB_HOST_ARCH),riscv64))	
 		rm ./obj-${DEB_HOST_GNU_TYPE}/src/ipa/starfive/openAlgo/starfive_isp_algorithms.so
-		cp starfive_post_script/starfive_isp_algorithms.so.0.0.1 ./obj-${DEB_HOST_GNU_TYPE}/src/ipa/starfive/openAlgo/
+		cp starfive_post_script/starfive_isp_algorithms.so.0.0.* ./obj-${DEB_HOST_GNU_TYPE}/src/ipa/starfive/openAlgo/
 endif
 
 
