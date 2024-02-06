@@ -286,12 +286,11 @@ struct jh7110_isp_sc_awb_ws {
 };
 
 struct jh7110_isp_sc_awb_point {
-	__u16 intensity;
 	__u8 weight;
 };
 
 struct jh7110_isp_sc_awb_config {
-	struct jh7110_isp_sc_awb_ps ws_ps_config;
+	struct jh7110_isp_sc_awb_ps ps_config;
 	__u8 awb_ps_grb_ba;
 	__u8 sel;
 	struct jh7110_isp_sc_awb_ws ws_config;
