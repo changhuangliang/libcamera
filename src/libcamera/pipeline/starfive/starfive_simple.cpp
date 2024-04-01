@@ -123,11 +123,11 @@ static const ControlInfoMap::Map ipaControls{
 
 } // namespace starfive::control
 
-int StarfiveSimpleCameraData::init() 
+int StarfiveSimpleCameraData::init()
 {
     int ret = 0;
 
-    MediaEntity *csiEntity = media_->getEntityByName("cdns_csi2rx.19800000.csi-bridge");
+    MediaEntity *csiEntity = media_->getEntityByName("cdns_csi2rx.19800000.csi");
     const std::vector<MediaPad *> &csiPads = csiEntity->pads();
     MediaEntity *sensorEntity = nullptr;
 
@@ -230,7 +230,7 @@ void StarfiveSimpleCameraData::collectCompMbusCode()
         }
         if(!hasSuitableSize)
             continue;
-        
+
         V4L2SubdeviceFormat sensorFormat = sensor_->getFormat(mbusCodes, allSize[0]);
         if (!disableISP) {
             if (ColorSpace::Primaries::Raw == sensorFormat.colorSpace->primaries)
@@ -378,7 +378,7 @@ int StarfiveSimplePipelineAdapter::linkPipeline()
 	int ret = 0;
 
 	if (!data->disableISP) {
-		MediaLink *ispLink = sfMediaDev->link("cdns_csi2rx.19800000.csi-bridge", 1, "capture_raw", 0);
+		MediaLink *ispLink = sfMediaDev->link("cdns_csi2rx.19800000.csi", 1, "capture_raw", 0);
 		if (ispLink) {
 			ret = ispLink->setEnabled(false);
 			if (ret)
@@ -415,14 +415,14 @@ int StarfiveSimplePipelineAdapter::linkPipeline()
 			if (ret)
 				return ret;
 		}
-        ispLink = sfMediaDev->link("cdns_csi2rx.19800000.csi-bridge", 1, "capture_raw", 0);
+        ispLink = sfMediaDev->link("cdns_csi2rx.19800000.csi", 1, "capture_raw", 0);
 		if (ispLink) {
 			ret = ispLink->setEnabled(true);
 			if (ret)
 				return ret;
 		}
     }
-	
+
 	return 0;
 }
 
