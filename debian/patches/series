@@ -1,3 +1,4 @@
 ppc64el-fix-ftbfs-gcc.patch
 skip_failing_tests.patch
 0001-Queue-one-more-buffer-to-the-isp-pipeline.patch
+0002-Distinguish-between-the-GPU-and-the-DC-nodes.patch
