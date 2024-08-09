@@ -337,6 +337,7 @@ void StarfiveSimpleCameraData::processIPAControls(ControlList &ctrlList)
             int index = ctrl.first - V4L2_CID_USER_JH7110_ISP_WB_SETTING;
             const CtrlInBufInfo *cibInfo = &CtrlInBufInfos[index];
 
+            /* fill struct jh7110_isp_params_buffer */
             parBuf->enable_setting |= cibInfo->positionFlag;
             memcpy(mem.data() + cibInfo->offset, data, parSize);
         }
