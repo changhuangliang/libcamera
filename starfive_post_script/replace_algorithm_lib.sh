@@ -18,7 +18,7 @@
 ###############################################################################
 curr_dir=$(dirname $0)
 
-src_ipa=$curr_dir/starfive_isp_algorithms.so.0.0.2
+src_ipa=$curr_dir/starfive_isp_algorithms.so.0.0.3
 
 ipa_so=starfive_isp_algorithms.so
 if [ $# -gt 0 ]; then
@@ -42,4 +42,3 @@ echo "cp $src_ipa $(dirname $dst_ipa)"
 cp $src_ipa $(dirname $dst_ipa)
 rm -rf $dst_ipa
 ln -sf $(basename $src_ipa) $dst_ipa
-
